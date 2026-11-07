@@ -1,0 +1,14 @@
+{
+  "name": "fully-tracked",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.7",
+    "leaflet": "^1.9.4"
+  }
+}

@@ -47,3 +47,9 @@ ehthumbs.db
 *~
 *.sublime-workspace
 *.sublime-project
+
+# Personal journal data (local only)
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
