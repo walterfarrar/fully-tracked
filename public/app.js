@@ -39,6 +39,7 @@ let trendsToken = 0;
 let dataToken = 0;
 let map = null;
 let markerLayer = null;
+let mapNote = 'Allow location to center this map. Saved check-ins appear as markers.';
 let mappedCount = -1;
 
 const intervalInput = document.getElementById('interval');
@@ -109,6 +110,83 @@ function setDefaultTimes() {
   });
 }
 
+const PREVIEW_ENTRIES_KEY = 'fully-tracked-preview-entries';
+
+function readPreviewEntries() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PREVIEW_ENTRIES_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePreviewEntries(entries) {
+  localStorage.setItem(PREVIEW_ENTRIES_KEY, JSON.stringify(entries));
+}
+
+function previewUrl(url) {
+  return new URL(url, 'https://preview.local');
+}
+
+function previewEntriesResponse(url) {
+  const needle = (previewUrl(url).searchParams.get('q') || '').trim().toLowerCase();
+  const entries = readPreviewEntries();
+  if (!needle) return { entries };
+  return {
+    entries: entries.filter((entry) => JSON.stringify(entry).toLowerCase().includes(needle)),
+  };
+}
+
+function savePreviewEntry(body) {
+  const entries = readPreviewEntries();
+  if (body.type === 'location') {
+    const latest = entries
+      .filter((entry) => entry.type === 'location')
+      .reduce((max, entry) => Math.max(max, new Date(entry.savedAt).getTime()), 0);
+    if (latest && Date.now() - latest < intervalMs()) {
+      const error = new Error('A check-in is already recent.');
+      error.status = 429;
+      throw error;
+    }
+  }
+  const entry = {
+    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    savedAt: new Date().toISOString(),
+    ...body,
+  };
+  entries.unshift(entry);
+  writePreviewEntries(entries);
+  return entry;
+}
+
+function emptyTrends(days) {
+  const blank = { empty: true, points: [], entryCount: 0 };
+  return {
+    days,
+    series: {
+      water: { ...blank, totalMl: 0 },
+      meals: { ...blank, totalCount: 0 },
+      mood: { ...blank, average: null },
+      sleep: { ...blank, totalHours: 0 },
+      steps: { ...blank, totalSteps: 0 },
+    },
+  };
+}
+
+function localApi(url, options) {
+  const path = url.split('?')[0];
+  const method = ((options && options.method) || 'GET').toUpperCase();
+  if (path === '/api/entries' && method === 'GET') return previewEntriesResponse(url);
+  if (path === '/api/entries' && method === 'POST') return savePreviewEntry(JSON.parse(options.body));
+  if (path === '/api/trends' && method === 'GET') {
+    return emptyTrends(Number(previewUrl(url).searchParams.get('days')) || 7);
+  }
+  const error = new Error('Request failed.');
+  error.status = 404;
+  throw error;
+}
+
 async function getJson(url, options) {
   let response;
   try {
@@ -118,6 +196,7 @@ async function getJson(url, options) {
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 404 || response.status === 405) return localApi(url, options);
     const error = new Error(data.error || 'Request failed.');
     error.status = response.status;
     error.payload = data;
@@ -310,36 +389,23 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function renderMap(entries) {
-  const points = entries.filter(
-    (entry) => entry.type === 'location'
-      && Number.isFinite(entry.latitude)
-      && Number.isFinite(entry.longitude)
-  );
+function setMapNote(message) {
+  mapNote = message || '';
   const empty = document.getElementById('map-empty');
+  if (!empty) return;
+  empty.hidden = !mapNote;
+  empty.textContent = mapNote;
+}
+
+function ensureMap() {
   const frame = document.getElementById('map');
-  const count = document.getElementById('map-count');
-  if (!points.length) {
-    empty.hidden = false;
-    frame.hidden = true;
-    count.textContent = '';
-    mappedCount = 0;
-    if (map) {
-      map.remove();
-      map = null;
-      markerLayer = null;
-    }
-    return;
+  if (!frame || !window.L) {
+    if (!window.L) showBanner('The map library did not load.');
+    return null;
   }
-  empty.hidden = true;
   frame.hidden = false;
-  count.textContent = points.length === 1 ? '1 check-in' : `${points.length} check-ins`;
-  if (!window.L) {
-    showBanner('The map library did not load.');
-    return;
-  }
   if (!map) {
-    map = L.map(frame, { scrollWheelZoom: false });
+    map = L.map(frame, { scrollWheelZoom: false }).setView([20, 0], 2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -356,6 +422,35 @@ function renderMap(entries) {
     });
     map._fullyTrackedIcon = icon;
   }
+  return map;
+}
+
+function showDeviceOnMap(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  if (!ensureMap()) return;
+  map.setView([latitude, longitude], 13);
+  setMapNote('Centered on this device. Saved check-ins appear as markers.');
+  window.setTimeout(() => map.invalidateSize(), 0);
+}
+
+function renderMap(entries) {
+  const points = entries.filter(
+    (entry) => entry.type === 'location'
+      && Number.isFinite(entry.latitude)
+      && Number.isFinite(entry.longitude)
+  );
+  const count = document.getElementById('map-count');
+  if (!ensureMap()) return;
+  if (!points.length) {
+    count.textContent = '';
+    mappedCount = 0;
+    markerLayer.clearLayers();
+    setMapNote(mapNote || 'Allow location to center this map. Saved check-ins appear as markers.');
+    window.setTimeout(() => map.invalidateSize(), 0);
+    return;
+  }
+  setMapNote('');
+  count.textContent = points.length === 1 ? '1 check-in' : `${points.length} check-ins`;
   markerLayer.clearLayers();
   const markers = points.map((point) => {
     const when = formatWhen(point.occurredAt);
@@ -492,6 +587,7 @@ async function recordPosition() {
   const position = await readPosition();
   if (!tracking) return 'stopped';
   const { latitude, longitude, accuracy } = position.coords;
+  showDeviceOnMap(latitude, longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0) {
     setStatus('The device returned a reading without a usable accuracy, so it was not saved. The next try stays on the interval.');
     return 'skip';
@@ -534,8 +630,12 @@ async function tick() {
     outcome = await recordPosition();
   } catch (error) {
     outcome = error && error.code === 1 ? 'denied' : 'failed';
-    if (outcome === 'denied') {
+    if (outcome === 'preview') {
+      setStatus('Tracking is on. This preview does not store check-ins.');
+      setMapNote('Centered on this device. This preview does not store check-ins.');
+    } else if (outcome === 'denied') {
       setStatus('Location permission is blocked, so this check-in was not recorded. Allow location for this site. Tracking stays on and tries again on the interval.');
+      setMapNote('Location access is off. Allow it to center the map. Until then the map stays on a general view.');
     } else {
       const detail = error && error.message ? error.message : 'the device location could not be read';
       setStatus(`Tracking is still on, but ${detail}. Another try waits for the interval.`);
@@ -747,7 +847,10 @@ function showView(name) {
   document.querySelectorAll('.tab').forEach((el) => {
     el.setAttribute('aria-current', el.dataset.view === name ? 'page' : 'false');
   });
-  if (name === 'map' && map) window.setTimeout(() => map.invalidateSize(), 60);
+  if (name === 'map') {
+    ensureMap();
+    if (map) window.setTimeout(() => map.invalidateSize(), 60);
+  }
   if (name === 'graphs') showMetric(activeMetric);
 }
 
