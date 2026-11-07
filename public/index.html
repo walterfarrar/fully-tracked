@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app7" />
+    <link rel="stylesheet" href="styles.css?v=app8" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -17,14 +17,38 @@
           <p class="wordmark">Fully Tracked</p>
           <h1>Log</h1>
           <div class="actions">
-            <button type="button" data-open="location">Location</button>
-            <button type="button" data-open="meal">Meal</button>
-            <button type="button" data-open="water">Water</button>
-            <button type="button" data-open="bathroom">Bathroom</button>
-            <button type="button" data-open="life">Life event</button>
-            <button type="button" data-open="mood">Mood</button>
-            <button type="button" data-open="sleep">Sleep</button>
+            <button type="button" data-open="location">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+              <span>Location</span>
+            </button>
+            <button type="button" data-open="meal">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v7a2 2 0 0 0 4 0V3"/><path d="M8 10v11"/><path d="M17 3c-1.6 2.2-2.2 4.2-2.2 6.2h4.4C19.2 7.2 18.6 5.2 17 3z"/><path d="M17 9.2V21"/></svg>
+              <span>Meal</span>
+            </button>
+            <button type="button" data-open="water">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l-1.2 16.2a2 2 0 0 1-2 1.8h-3.6a2 2 0 0 1-2-1.8L7 3z"/><path d="M8.2 8h7.6"/></svg>
+              <span>Hydration</span>
+            </button>
+            <button type="button" data-open="bathroom">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="4.5" rx="1"/><path d="M6 8h12v2.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5V8z"/></svg>
+              <span>Bathroom</span>
+            </button>
+            <button type="button" data-open="life">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="M12 13.5v4M10 15.5h4"/></svg>
+              <span>Life event</span>
+            </button>
+            <button type="button" data-open="mood">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01"/><path d="M8.5 14.2c1.1 1.2 2.3 1.8 3.5 1.8s2.4-.6 3.5-1.8"/></svg>
+              <span>Mood</span>
+            </button>
+            <button type="button" data-open="sleep">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3.5A7.5 7.5 0 1 0 20.5 14 6 6 0 0 1 16 3.5z"/></svg>
+              <span>Sleep</span>
+            </button>
           </div>
+          <p id="home-note" class="note" hidden></p>
+          <input id="interval" type="number" min="5" max="10080" step="1" value="10" hidden>
+          <p id="track-status" class="status" hidden></p>
         </section>
 
         <div id="checkin" class="checkin" hidden role="dialog" aria-modal="true" aria-labelledby="checkin-heading">
@@ -32,23 +56,6 @@
             <h2 id="checkin-heading">Check-in</h2>
             <button type="button" id="checkin-close">Close</button>
           </div>
-          <section class="log-panel" id="location" data-panel="location" hidden aria-labelledby="location-heading">
-            <div class="section-head">
-              <h3 id="location-heading">Location</h3>
-              <p class="eyebrow">Always on</p>
-            </div>
-            <p class="note">
-              Location tracking is always on. Check-ins follow the interval below and are not second by second.
-              Permission is asked once.
-            </p>
-            <div class="interval-row">
-              <label for="interval">Minutes between check-ins</label>
-              <input id="interval" type="number" min="5" max="10080" step="1" value="10" inputmode="numeric" />
-            </div>
-            <p class="hint">Default 10. Minimum 5. Maximum 7 days. Tracking starts by itself.</p>
-            <p id="track-status" class="status" aria-live="polite"></p>
-          </section>
-
           <form id="meal-form" class="entry-form log-panel" data-panel="meal" hidden>
             <h3>Meal</h3>
             <div class="field">
@@ -59,15 +66,33 @@
               </div>
             </div>
             <div class="field">
-              <label for="meal-description">What you ate</label>
-              <textarea id="meal-description" name="description" required maxlength="4000"></textarea>
+              <label>Foods</label>
+              <div id="meal-foods" class="choice-list"></div>
+              <div class="add-row">
+                <input id="meal-food-new" type="text" maxlength="80" placeholder="Add a food" autocomplete="off" />
+                <button type="button" id="meal-food-add">Add</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Nutrition label</label>
+              <div class="photo-actions">
+                <button type="button" id="meal-take">Take photo</button>
+                <button type="button" id="meal-choose">Choose photo</button>
+              </div>
+              <input id="meal-camera" type="file" accept="image/*" capture="environment" hidden />
+              <input id="meal-library" type="file" accept="image/*" hidden />
+              <p id="meal-nutrition" hidden></p>
+            </div>
+            <div class="field">
+              <label for="meal-amount">How much did you have?</label>
+              <input id="meal-amount" type="text" maxlength="80" placeholder="1 serving" autocomplete="off" />
             </div>
             <p class="form-error" role="alert"></p>
             <button type="submit">Save meal</button>
           </form>
 
           <form id="water-form" class="entry-form log-panel" data-panel="water" hidden>
-            <h3>Water</h3>
+            <h3>Hydration</h3>
             <div class="field">
               <label>When</label>
               <div class="when-control">
@@ -76,11 +101,20 @@
               </div>
             </div>
             <div class="field">
-              <label for="water-amount">Amount (ml)</label>
-              <input id="water-amount" name="amountMl" type="number" min="1" max="20000" step="1" required inputmode="numeric" />
+              <label>Drink</label>
+              <div id="drink-list" class="choice-list"></div>
+              <div class="add-row">
+                <input id="drink-new" type="text" maxlength="80" placeholder="Add a drink" autocomplete="off" />
+                <button type="button" id="drink-add">Add</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Amount</label>
+              <p class="hint">1 cup is 8 oz.</p>
+              <div id="oz-choices" class="choice-list"></div>
             </div>
             <p class="form-error" role="alert"></p>
-            <button type="submit">Save water</button>
+            <button type="submit">Save hydration</button>
           </form>
 
           <form id="bathroom-form" class="entry-form log-panel" data-panel="bathroom" hidden>
@@ -93,26 +127,21 @@
               </div>
             </div>
             <div class="field">
-              <label for="bath-kind">Kind</label>
-              <select id="bath-kind" name="kind" required>
-                <option value="">Choose</option>
-                <option value="stool">Stool</option>
-                <option value="urine">Urine</option>
-              </select>
+              <div class="toggle-group" id="bath-kind-toggle">
+                <button type="button" data-kind="stool" aria-pressed="true">Stool</button>
+                <button type="button" data-kind="urine" aria-pressed="false">Urine</button>
+              </div>
             </div>
-            <div class="field" id="bristol-field">
-              <label for="bath-bristol">Bristol scale (optional)</label>
-              <select id="bath-bristol" name="bristolScale">
-                <option value="">Not set</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-              </select>
-              <p class="hint">Stool only. Types 1–7.</p>
+            <div class="field" id="bristol-options">
+              <label>Bristol scale</label>
+              <p class="hint">Types 1–7.</p>
+              <div id="bristol-choices" class="choice-list"></div>
+            </div>
+            <div class="field" id="urine-options" hidden>
+              <label>Color</label>
+              <div id="urine-colors" class="choice-list"></div>
+              <label>Amount</label>
+              <div id="urine-amounts" class="choice-list"></div>
             </div>
             <div class="field">
               <label for="bath-note">Note (optional)</label>
@@ -132,12 +161,16 @@
               </div>
             </div>
             <div class="field">
-              <label for="life-title">Title</label>
-              <input id="life-title" name="title" type="text" required maxlength="200" />
+              <label>Type</label>
+              <div id="event-types" class="choice-list"></div>
+              <div class="add-row">
+                <input id="event-new" type="text" maxlength="80" placeholder="Add a type" autocomplete="off" />
+                <button type="button" id="event-add">Add</button>
+              </div>
             </div>
             <div class="field">
-              <label for="life-description">Description</label>
-              <textarea id="life-description" name="description" required maxlength="4000"></textarea>
+              <label for="life-description">Description (optional)</label>
+              <textarea id="life-description" name="description" maxlength="4000"></textarea>
             </div>
             <p class="form-error" role="alert"></p>
             <button type="submit">Save life event</button>
@@ -154,18 +187,12 @@
             </div>
             <div class="field">
               <label for="mood-score">Score</label>
-              <select id="mood-score" name="moodScore" required>
-                <option value="">Choose</option>
-                <option value="1">1 (low)</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5 (high)</option>
-              </select>
+              <svg id="mood-face" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01"/><path id="mood-mouth" d="M8.5 15h7"/></svg>
+              <input id="mood-score" name="moodScore" type="range" min="1" max="10" step="1" value="6" />
             </div>
             <div class="field">
-              <label for="mood-note">Note (optional)</label>
-              <input id="mood-note" name="note" type="text" maxlength="2000" />
+              <label>Emotions</label>
+              <div id="mood-tags" class="choice-list"></div>
             </div>
             <p class="form-error" role="alert"></p>
             <button type="submit">Save mood</button>
@@ -242,7 +269,7 @@
             </article>
             <article class="chart-card" data-chart="mood" hidden>
               <h3>Mood</h3>
-              <p class="metric">Daily average (1–5)</p>
+              <p class="metric">Daily average (1–10)</p>
               <p class="chart-summary"></p>
               <p class="chart-empty empty" hidden></p>
               <div class="chart-wrap"><canvas aria-label="Mood by day"></canvas></div>
@@ -290,6 +317,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app12"></script>
+    <script src="app.js?v=app13"></script>
   </body>
 </html>

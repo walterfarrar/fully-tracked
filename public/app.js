@@ -9,7 +9,7 @@ const INTERVAL_KEY = 'fully-tracked-interval-min';
 const TYPE_LABELS = {
   location: 'Location',
   meal: 'Meal',
-  water: 'Water',
+  water: 'Hydration',
   bathroom: 'Bathroom',
   life_event: 'Life event',
   mood: 'Mood',
@@ -41,6 +41,7 @@ let map = null;
 let markerLayer = null;
 let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
 let mapFocusToken = 0;
+let pendingMapPoint = null;
 const MAP_FOCUS_ZOOM = 16;
 const CELL_DEGREES = 0.005;
 
@@ -156,6 +157,377 @@ function bindWhenDisplays() {
   });
 }
 
+const FOODS_KEY = 'fully-tracked-foods';
+const DRINKS_KEY = 'fully-tracked-drinks';
+const EVENTS_KEY = 'fully-tracked-event-types';
+const STARTER_FOODS = ['Eggs', 'Oatmeal', 'Rice', 'Chicken', 'Salad', 'Fruit', 'Yogurt', 'Sandwich', 'Pasta', 'Soup'];
+const STARTER_DRINKS = ['Water', 'Coffee', 'Soda'];
+const STARTER_EVENTS = ['Family trip', 'Birthday'];
+const OZ_CHOICES = [
+  { oz: 8, label: '8 oz · 1 cup' },
+  { oz: 12, label: '12 oz' },
+  { oz: 16, label: '16 oz · 2 cups' },
+  { oz: 20, label: '20 oz' },
+  { oz: 24, label: '24 oz · 3 cups' },
+];
+const URINE_COLORS = ['Clear', 'Pale', 'Yellow', 'Dark', 'Amber'];
+const URINE_AMOUNTS = ['A little', 'Usual', 'A lot'];
+const MOOD_TAGS = ['happy', 'sad', 'anxious', 'excited'];
+let pickedFoods = new Set();
+let pickedDrink = '';
+let pickedOz = 0;
+let bathKind = 'stool';
+let pickedBristol = 0;
+let pickedUrineColor = '';
+let pickedUrineAmount = '';
+let pickedEvent = '';
+let pickedEmotions = new Set();
+let mealNutrition = null;
+
+function readCatalog(key, starter) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+    if (Array.isArray(parsed) && parsed.length) return parsed.map((item) => String(item));
+  } catch {
+    /* Seed the list below. */
+  }
+  const seeded = starter.slice();
+  localStorage.setItem(key, JSON.stringify(seeded));
+  return seeded;
+}
+
+function rememberCatalogItem(key, starter, name) {
+  const clean = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return '';
+  const items = readCatalog(key, starter);
+  const existing = items.find((item) => item.toLowerCase() === clean.toLowerCase());
+  if (existing) return existing;
+  items.push(clean);
+  localStorage.setItem(key, JSON.stringify(items));
+  return clean;
+}
+
+function fillChoices(container, items, pressed, onPick) {
+  if (!container) return;
+  container.replaceChildren();
+  items.forEach((item) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = item.label || String(item);
+    button.setAttribute('aria-pressed', pressed(item) ? 'true' : 'false');
+    button.addEventListener('click', () => onPick(item));
+    container.append(button);
+  });
+}
+
+function renderMealFoods() {
+  fillChoices(
+    document.getElementById('meal-foods'),
+    readCatalog(FOODS_KEY, STARTER_FOODS),
+    (name) => pickedFoods.has(name),
+    (name) => {
+      if (pickedFoods.has(name)) pickedFoods.delete(name);
+      else pickedFoods.add(name);
+      renderMealFoods();
+    }
+  );
+}
+
+function renderDrinks() {
+  fillChoices(
+    document.getElementById('drink-list'),
+    readCatalog(DRINKS_KEY, STARTER_DRINKS),
+    (name) => name === pickedDrink,
+    (name) => {
+      pickedDrink = name;
+      renderDrinks();
+    }
+  );
+  fillChoices(
+    document.getElementById('oz-choices'),
+    OZ_CHOICES,
+    (choice) => choice.oz === pickedOz,
+    (choice) => {
+      pickedOz = choice.oz;
+      renderDrinks();
+    }
+  );
+}
+
+function renderEvents() {
+  fillChoices(
+    document.getElementById('event-types'),
+    readCatalog(EVENTS_KEY, STARTER_EVENTS),
+    (name) => name === pickedEvent,
+    (name) => {
+      pickedEvent = name;
+      renderEvents();
+    }
+  );
+}
+
+function renderBathChoices() {
+  document.querySelectorAll('#bath-kind-toggle button').forEach((button) => {
+    button.setAttribute('aria-pressed', button.dataset.kind === bathKind ? 'true' : 'false');
+  });
+  const bristol = document.getElementById('bristol-options');
+  const urine = document.getElementById('urine-options');
+  if (bristol) bristol.hidden = bathKind !== 'stool';
+  if (urine) urine.hidden = bathKind !== 'urine';
+  fillChoices(
+    document.getElementById('bristol-choices'),
+    [1, 2, 3, 4, 5, 6, 7],
+    (value) => value === pickedBristol,
+    (value) => {
+      pickedBristol = value;
+      renderBathChoices();
+    }
+  );
+  fillChoices(
+    document.getElementById('urine-colors'),
+    URINE_COLORS,
+    (name) => name === pickedUrineColor,
+    (name) => {
+      pickedUrineColor = name;
+      renderBathChoices();
+    }
+  );
+  fillChoices(
+    document.getElementById('urine-amounts'),
+    URINE_AMOUNTS,
+    (name) => name === pickedUrineAmount,
+    (name) => {
+      pickedUrineAmount = name;
+      renderBathChoices();
+    }
+  );
+}
+
+function syncMoodFace() {
+  const input = document.getElementById('mood-score');
+  const mouth = document.getElementById('mood-mouth');
+  const score = input ? Number(input.value) : 6;
+  if (!mouth) return;
+  if (score <= 2) mouth.setAttribute('d', 'M8 16c1.2-1.6 2.4-2.2 4-2.2s2.8.6 4 2.2');
+  else if (score <= 4) mouth.setAttribute('d', 'M8.5 15.5c1.1-1 2.2-1.4 3.5-1.4s2.4.4 3.5 1.4');
+  else if (score <= 6) mouth.setAttribute('d', 'M8.5 15h7');
+  else if (score <= 8) mouth.setAttribute('d', 'M8.5 14.2c1.1 1.1 2.3 1.6 3.5 1.6s2.4-.5 3.5-1.6');
+  else mouth.setAttribute('d', 'M8 13.5c1.2 2 2.6 3 4 3s2.8-1 4-3');
+}
+
+function renderMoodTags() {
+  fillChoices(
+    document.getElementById('mood-tags'),
+    MOOD_TAGS,
+    (name) => pickedEmotions.has(name),
+    (name) => {
+      if (pickedEmotions.has(name)) pickedEmotions.delete(name);
+      else pickedEmotions.add(name);
+      renderMoodTags();
+    }
+  );
+  syncMoodFace();
+}
+
+function renderCheckInChoices() {
+  renderMealFoods();
+  renderDrinks();
+  renderEvents();
+  renderBathChoices();
+  renderMoodTags();
+}
+
+function resetCheckInState() {
+  pickedFoods = new Set();
+  pickedDrink = '';
+  pickedOz = 0;
+  bathKind = 'stool';
+  pickedBristol = 0;
+  pickedUrineColor = '';
+  pickedUrineAmount = '';
+  pickedEvent = '';
+  pickedEmotions = new Set();
+  mealNutrition = null;
+  const amount = document.getElementById('meal-amount');
+  if (amount) amount.value = '';
+  const foodNew = document.getElementById('meal-food-new');
+  if (foodNew) foodNew.value = '';
+  const drinkNew = document.getElementById('drink-new');
+  if (drinkNew) drinkNew.value = '';
+  const eventNew = document.getElementById('event-new');
+  if (eventNew) eventNew.value = '';
+  const lifeDesc = document.getElementById('life-description');
+  if (lifeDesc) lifeDesc.value = '';
+  const bathNote = document.getElementById('bath-note');
+  if (bathNote) bathNote.value = '';
+  const mood = document.getElementById('mood-score');
+  if (mood) mood.value = '6';
+  const box = document.getElementById('meal-nutrition');
+  if (box) {
+    box.hidden = true;
+    box.textContent = '';
+  }
+  renderCheckInChoices();
+}
+
+function firstNumber(line) {
+  const match = String(line).match(/([0-9]+(?:\.[0-9]+)?)/);
+  return match ? match[1] : '';
+}
+
+function servingSizeFrom(lines, index) {
+  const line = String(lines[index]);
+  const lowered = line.toLowerCase();
+  const at = lowered.indexOf('serving size');
+  if (at < 0) return '';
+  const rest = line.slice(at + 'serving size'.length).replace(/^[\s:.-]+/, '').trim();
+  if (rest) return rest;
+  const next = lines[index + 1];
+  if (!next) return '';
+  const candidate = String(next).trim();
+  const lower = candidate.toLowerCase();
+  if (lower.includes('serving') || lower.includes('amount')) return '';
+  return candidate;
+}
+
+function parseNutritionLines(lines) {
+  const draft = {
+    servingSize: '',
+    calories: '',
+    totalFat: '',
+    saturatedFat: '',
+    cholesterol: '',
+    sodium: '',
+    carbohydrates: '',
+    fiber: '',
+    sugar: '',
+    protein: '',
+    message: '',
+    filledAny: false,
+  };
+  const source = Array.isArray(lines) ? lines.slice() : [];
+  const index = source.findIndex((line) => String(line).toLowerCase().includes('serving size'));
+  if (index >= 0) {
+    draft.servingSize = servingSizeFrom(source, index);
+    source.splice(index, 1);
+  }
+  const rules = [
+    ['saturated fat', 'saturatedFat'],
+    ['cholesterol', 'cholesterol'],
+    ['sodium', 'sodium'],
+    ['dietary fiber', 'fiber'],
+    ['total fiber', 'fiber'],
+    ['fiber', 'fiber'],
+    ['total sugars', 'sugar'],
+    ['sugars', 'sugar'],
+    ['sugar', 'sugar'],
+    ['total carbohydrate', 'carbohydrates'],
+    ['carbohydrate', 'carbohydrates'],
+    ['protein', 'protein'],
+    ['total fat', 'totalFat'],
+    ['calories', 'calories'],
+  ];
+  source.forEach((line) => {
+    const lowered = String(line).toLowerCase();
+    if (lowered.includes('calories from fat')) return;
+    for (let i = 0; i < rules.length; i += 1) {
+      const name = rules[i][0];
+      const key = rules[i][1];
+      if (lowered.includes(name) && !draft[key]) {
+        const number = firstNumber(line);
+        if (number) draft[key] = number;
+        break;
+      }
+    }
+  });
+  draft.filledAny = [
+    draft.servingSize, draft.calories, draft.totalFat, draft.saturatedFat, draft.cholesterol,
+    draft.sodium, draft.carbohydrates, draft.fiber, draft.sugar, draft.protein,
+  ].some((value) => String(value).trim());
+  draft.message = draft.filledAny
+    ? 'Label facts are ready to save with how much you had. The photo was not saved.'
+    : 'No nutrition facts were read. Nothing was filled in. The photo was not saved.';
+  return draft;
+}
+
+function nutritionPayload(draft) {
+  if (!draft || !draft.filledAny) return {};
+  const payload = {};
+  if (draft.servingSize) payload.servingSize = draft.servingSize;
+  ['calories', 'totalFat', 'saturatedFat', 'cholesterol', 'sodium', 'carbohydrates', 'fiber', 'sugar', 'protein'].forEach((key) => {
+    if (draft[key] === '' || draft[key] == null) return;
+    const value = Number(draft[key]);
+    if (Number.isFinite(value)) payload[key] = value;
+  });
+  return payload;
+}
+
+function showNutritionMessage(message) {
+  const box = document.getElementById('meal-nutrition');
+  if (!box) return;
+  box.hidden = !message;
+  box.textContent = message || '';
+}
+
+async function readNutritionFile(file) {
+  if (!file) return;
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    let lines = [];
+    if (typeof TextDetector === 'function') {
+      const detector = new TextDetector();
+      const found = await detector.detect(bitmap);
+      lines = found.map((item) => item.rawValue).filter(Boolean);
+    } else {
+      const mod = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js');
+      const worker = await mod.createWorker('eng');
+      try {
+        const result = await worker.recognize(bitmap);
+        lines = String((result.data && result.data.text) || '').split(/\n+/);
+      } finally {
+        await worker.terminate();
+      }
+    }
+    const draft = parseNutritionLines(lines);
+    mealNutrition = draft.filledAny ? draft : null;
+    showNutritionMessage(draft.message);
+  } catch {
+    mealNutrition = null;
+    showNutritionMessage('No nutrition facts were read. Nothing was filled in. The photo was not saved.');
+  } finally {
+    if (bitmap && bitmap.close) bitmap.close();
+  }
+}
+
+function addTypedFood() {
+  const input = document.getElementById('meal-food-new');
+  const saved = rememberCatalogItem(FOODS_KEY, STARTER_FOODS, input && input.value);
+  if (!saved) return;
+  pickedFoods.add(saved);
+  input.value = '';
+  renderMealFoods();
+}
+
+function addTypedDrink() {
+  const input = document.getElementById('drink-new');
+  const saved = rememberCatalogItem(DRINKS_KEY, STARTER_DRINKS, input && input.value);
+  if (!saved) return;
+  pickedDrink = saved;
+  input.value = '';
+  renderDrinks();
+}
+
+function addTypedEvent() {
+  const input = document.getElementById('event-new');
+  const saved = rememberCatalogItem(EVENTS_KEY, STARTER_EVENTS, input && input.value);
+  if (!saved) return '';
+  pickedEvent = saved;
+  input.value = '';
+  renderEvents();
+  return saved;
+}
+
 const PREVIEW_ENTRIES_KEY = 'fully-tracked-preview-entries';
 
 function readPreviewEntries() {
@@ -186,7 +558,8 @@ function previewEntriesResponse(url) {
 
 function savePreviewEntry(body) {
   const entries = readPreviewEntries();
-  if (body.type === 'location') {
+  const manualPing = Boolean(body.manual);
+  if (body.type === 'location' && !manualPing) {
     const latest = entries
       .filter((entry) => entry.type === 'location')
       .reduce((max, entry) => Math.max(max, new Date(entry.savedAt).getTime()), 0);
@@ -196,10 +569,12 @@ function savePreviewEntry(body) {
       throw error;
     }
   }
+  const stored = { ...body };
+  delete stored.manual;
   const entry = {
     id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
     savedAt: new Date().toISOString(),
-    ...body,
+    ...stored,
   };
   entries.unshift(entry);
   writePreviewEntries(entries);
@@ -257,11 +632,25 @@ function entryLines(entry) {
       `${entry.latitude.toFixed(5)}, ${entry.longitude.toFixed(5)} · ±${Math.round(entry.accuracyMeters)} m · device`,
     ];
   }
-  if (entry.type === 'meal') return [entry.description];
-  if (entry.type === 'water') return [`${formatNum(entry.amountMl)} ml`];
+  if (entry.type === 'meal') {
+    const foods = Array.isArray(entry.foods) && entry.foods.length ? entry.foods.join(', ') : entry.description;
+    const lines = foods ? [foods] : [];
+    if (entry.amountHad) lines.push(entry.amountHad);
+    if (entry.calories != null && entry.calories !== '') lines.push(`${entry.calories} kcal`);
+    return lines;
+  }
+  if (entry.type === 'water') {
+    const name = entry.drinkName || 'Water';
+    if (entry.amountOz != null) return [`${name} · ${formatNum(entry.amountOz)} oz`];
+    return [`${name} · ${formatNum(entry.amountMl)} ml`];
+  }
   if (entry.type === 'bathroom') {
     const bits = [entry.kind === 'stool' ? 'Stool' : 'Urine'];
-    if (entry.bristolScale != null) bits.push(`Bristol ${entry.bristolScale}`);
+    if (entry.kind === 'stool' && entry.bristolScale != null) bits.push(`Bristol ${entry.bristolScale}`);
+    if (entry.kind === 'urine') {
+      if (entry.urineColor) bits.push(entry.urineColor);
+      if (entry.urineAmount) bits.push(entry.urineAmount);
+    }
     const lines = [bits.join(' · ')];
     if (entry.note) lines.push(entry.note);
     return lines;
@@ -272,7 +661,8 @@ function entryLines(entry) {
     return lines;
   }
   if (entry.type === 'mood') {
-    const lines = [`${entry.moodScore} / 5`];
+    const lines = [`${entry.moodScore} / 10`];
+    if (Array.isArray(entry.emotions) && entry.emotions.length) lines.push(entry.emotions.join(', '));
     if (entry.note) lines.push(entry.note);
     return lines;
   }
@@ -295,7 +685,7 @@ function renderList(entries, query) {
     empty.hidden = false;
     empty.textContent = trimmed
       ? `No entries match “${trimmed}”.`
-      : 'Nothing here yet. Location check-ins appear when tracking is on. Meals, water, bathroom, life events, mood, and sleep can be added by hand.';
+      : 'Nothing here yet. Location check-ins appear when tracking is on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand.';
     return;
   }
   empty.hidden = true;
@@ -326,6 +716,17 @@ function renderList(entries, query) {
     saved.className = 'saved';
     saved.textContent = `Saved ${formatWhen(entry.savedAt)}`;
     article.append(saved);
+    if (entry.type === 'location' && Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude)) {
+      article.tabIndex = 0;
+      article.setAttribute('role', 'button');
+      const openOnMap = () => focusMapOnEntry(entry.latitude, entry.longitude);
+      article.addEventListener('click', openOnMap);
+      article.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openOnMap();
+      });
+    }
     list.append(article);
   }
 }
@@ -518,6 +919,13 @@ function frameSavedCheckIns() {
   map.fitBounds(bounds.pad(0.25));
 }
 
+function focusMapOnEntry(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  mapFocusToken += 1;
+  pendingMapPoint = { latitude, longitude };
+  showView('map');
+}
+
 function mapTabOpen() {
   const view = document.getElementById('view-map');
   return Boolean(view && !view.hidden);
@@ -548,6 +956,14 @@ async function focusMapOnOpen() {
   }
 }
 
+function heatFill(count) {
+  const mix = Math.min(1, Math.max(0, (count - 1) / 99));
+  const red = Math.round(214 + (192 - 214) * mix);
+  const green = Math.round(236 + (48 - 236) * mix);
+  const blue = Math.round(196 + (42 - 196) * mix);
+  return `rgb(${red}, ${green}, ${blue})`;
+}
+
 function renderMap(entries) {
   const points = locationPoints(entries);
   const count = document.getElementById('map-count');
@@ -563,18 +979,14 @@ function renderMap(entries) {
   count.textContent = points.length === 1 ? '1 check-in' : `${points.length} check-ins`;
   markerLayer.clearLayers();
   const drawn = heatCellsFor(points);
-  const busiest = drawn.reduce((max, cell) => Math.max(max, cell.count), 1);
   const shapes = drawn.map((cell) => {
-    const mix = busiest <= 1 ? 0 : (cell.count - 1) / (busiest - 1);
-    const red = Math.round(212 + (18 - 212) * mix);
-    const green = Math.round(184 + (17 - 184) * mix);
-    const blue = Math.round(150 + (15 - 150) * mix);
+    const fill = heatFill(cell.count);
     const label = cell.count === 1 ? '1 check-in in this cell' : `${cell.count} check-ins in this cell`;
     return L.rectangle([[cell.south, cell.west], [cell.north, cell.east]], {
-      color: '#12110f',
-      weight: 1,
-      fillColor: `rgb(${red}, ${green}, ${blue})`,
-      fillOpacity: 0.45 + 0.45 * mix,
+      color: '#243028',
+      weight: 1.5,
+      fillColor: fill,
+      fillOpacity: 0.82,
     }).bindPopup(label);
   });
   shapes.forEach((shape) => shape.addTo(markerLayer));
@@ -694,6 +1106,49 @@ function readPosition() {
   });
 }
 
+async function pingLocation() {
+  const button = document.querySelector('[data-open="location"]');
+  const note = document.getElementById('home-note');
+  if (button) button.disabled = true;
+  try {
+    const position = await readPosition();
+    const { latitude, longitude, accuracy } = position.coords;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0) {
+      showBanner('The device returned a reading without a usable accuracy, so it was not saved.');
+      return;
+    }
+    await getJson('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'location',
+        occurredAt: new Date(position.timestamp || Date.now()).toISOString(),
+        latitude,
+        longitude,
+        accuracyMeters: accuracy,
+        source: 'device',
+        manual: true,
+      }),
+    });
+    showBanner('');
+    if (note) {
+      note.hidden = false;
+      note.textContent = 'Location recorded.';
+    }
+    try {
+      await refreshAll();
+    } catch (error) {
+      if (!offlinePreview(error)) showBanner(error.message);
+    }
+  } catch (error) {
+    if (note) note.hidden = true;
+    const fromDevice = error && (error.code === 1 || error.code === 2 || error.code === 3);
+    showBanner(fromDevice ? 'Location was not recorded.' : (error.message || 'Location was not recorded.'));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function recordPosition() {
   const position = await readPosition();
   if (!tracking) return 'stopped';
@@ -793,13 +1248,7 @@ function restoreInterval() {
 }
 
 function syncBristol() {
-  const kind = document.getElementById('bath-kind');
-  const bristol = document.getElementById('bath-bristol');
-  const field = document.getElementById('bristol-field');
-  const stool = kind.value === 'stool';
-  field.hidden = !stool;
-  bristol.disabled = !stool;
-  if (!stool) bristol.value = '';
+  renderBathChoices();
 }
 
 function bindForm(id, build) {
@@ -819,7 +1268,7 @@ function bindForm(id, build) {
       });
       form.reset();
       setDefaultTimes();
-      syncBristol();
+      resetCheckInState();
       closeCheckIn();
       await refreshAll();
     } catch (err) {
@@ -833,46 +1282,114 @@ function bindForm(id, build) {
 }
 
 function bindForms() {
-  bindForm('meal-form', (data) => ({
-    type: 'meal',
-    occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-    description: String(data.get('description') || ''),
-  }));
-  bindForm('water-form', (data) => ({
-    type: 'water',
-    occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-    amountMl: Number(data.get('amountMl')),
-  }));
+  bindForm('meal-form', (data) => {
+    const foods = [...pickedFoods];
+    const amountHad = document.getElementById('meal-amount').value.trim();
+    if (!foods.length && !(mealNutrition && mealNutrition.filledAny)) throw new Error('Choose a food.');
+    if (mealNutrition && mealNutrition.filledAny && !amountHad) throw new Error('Enter how much you had.');
+    return {
+      type: 'meal',
+      occurredAt: fromDatetimeLocal(data.get('occurredAt')),
+      description: foods.join(', '),
+      foods,
+      amountHad: amountHad || undefined,
+      ...nutritionPayload(mealNutrition),
+    };
+  });
+  bindForm('water-form', (data) => {
+    if (!pickedDrink) throw new Error('Choose a drink.');
+    if (!pickedOz) throw new Error('Choose an amount.');
+    return {
+      type: 'water',
+      occurredAt: fromDatetimeLocal(data.get('occurredAt')),
+      drinkName: pickedDrink,
+      amountOz: pickedOz,
+    };
+  });
   bindForm('bathroom-form', (data) => {
     const payload = {
       type: 'bathroom',
       occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-      kind: data.get('kind'),
+      kind: bathKind,
       note: String(data.get('note') || ''),
     };
-    const bristol = data.get('bristolScale');
-    if (payload.kind === 'stool' && bristol) payload.bristolScale = Number(bristol);
+    if (bathKind === 'stool') {
+      if (!pickedBristol) throw new Error('Choose a Bristol type.');
+      payload.bristolScale = pickedBristol;
+    } else {
+      if (!pickedUrineColor || !pickedUrineAmount) throw new Error('Choose a urine color and amount.');
+      payload.urineColor = pickedUrineColor;
+      payload.urineAmount = pickedUrineAmount;
+    }
     return payload;
   });
-  bindForm('life-form', (data) => ({
-    type: 'life_event',
-    occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-    title: String(data.get('title') || ''),
-    description: String(data.get('description') || ''),
-  }));
-  bindForm('mood-form', (data) => ({
-    type: 'mood',
-    occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-    moodScore: Number(data.get('moodScore')),
-    note: String(data.get('note') || ''),
-  }));
+  bindForm('life-form', (data) => {
+    const typed = addTypedEvent();
+    const title = pickedEvent || typed;
+    if (!title) throw new Error('Choose a type.');
+    const description = String(data.get('description') || '').trim();
+    return {
+      type: 'life_event',
+      occurredAt: fromDatetimeLocal(data.get('occurredAt')),
+      title,
+      description,
+    };
+  });
+  bindForm('mood-form', (data) => {
+    const moodScore = Number(data.get('moodScore'));
+    if (!Number.isInteger(moodScore) || moodScore < 1 || moodScore > 10) throw new Error('Choose a score from 1 to 10.');
+    return {
+      type: 'mood',
+      occurredAt: fromDatetimeLocal(data.get('occurredAt')),
+      moodScore,
+      emotions: [...pickedEmotions],
+    };
+  });
   bindForm('sleep-form', (data) => ({
     type: 'sleep',
     occurredAt: fromDatetimeLocal(data.get('occurredAt')),
     sleepHours: Number(data.get('sleepHours')),
     note: String(data.get('note') || ''),
   }));
-  document.getElementById('bath-kind').addEventListener('change', syncBristol);
+  document.getElementById('bath-kind-toggle').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-kind]');
+    if (!button) return;
+    bathKind = button.dataset.kind;
+    renderBathChoices();
+  });
+  document.getElementById('meal-food-add').addEventListener('click', addTypedFood);
+  document.getElementById('meal-food-new').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addTypedFood();
+  });
+  document.getElementById('drink-add').addEventListener('click', addTypedDrink);
+  document.getElementById('drink-new').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addTypedDrink();
+  });
+  document.getElementById('event-add').addEventListener('click', addTypedEvent);
+  document.getElementById('event-new').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addTypedEvent();
+  });
+  document.getElementById('mood-score').addEventListener('input', syncMoodFace);
+  document.getElementById('meal-take').addEventListener('click', () => {
+    document.getElementById('meal-camera').click();
+  });
+  document.getElementById('meal-choose').addEventListener('click', () => {
+    document.getElementById('meal-library').click();
+  });
+  const onPhoto = (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (file) void readNutritionFile(file);
+  };
+  document.getElementById('meal-camera').addEventListener('change', onPhoto);
+  document.getElementById('meal-library').addEventListener('change', onPhoto);
+  renderCheckInChoices();
 }
 
 function bindSearch() {
@@ -958,7 +1475,8 @@ function openCheckIn(kind) {
   });
   const heading = document.getElementById('checkin-heading');
   const source = document.querySelector(`.actions button[data-open="${kind}"]`);
-  if (heading && source) heading.textContent = source.textContent;
+  const label = source && source.querySelector('span');
+  if (heading && label) heading.textContent = label.textContent;
   layer.hidden = false;
   stampCheckInTimes();
   if (kind === 'bathroom') syncBristol();
@@ -981,8 +1499,16 @@ function showView(name) {
   });
   if (name === 'map') {
     ensureMap();
+    const point = pendingMapPoint;
+    pendingMapPoint = null;
     window.setTimeout(() => {
-      if (mapTabOpen()) void focusMapOnOpen();
+      if (!mapTabOpen() || !map) return;
+      map.invalidateSize();
+      if (point) {
+        map.setView([point.latitude, point.longitude], MAP_FOCUS_ZOOM);
+        return;
+      }
+      void focusMapOnOpen();
     }, 60);
   }
   if (name === 'graphs') showMetric(activeMetric);
@@ -1004,8 +1530,8 @@ function showMetric(key) {
 function renderCorrelations() {
   const el = document.getElementById('correlation-sentence');
   if (!el) return;
-  const meals = allEntries.filter((entry) => entry.type === 'meal' && entry.description);
-  const lows = allEntries.filter((entry) => entry.type === 'mood' && Number(entry.moodScore) <= 2);
+  const meals = allEntries.filter((entry) => entry.type === 'meal' && (entry.description || (Array.isArray(entry.foods) && entry.foods.length)));
+  const lows = allEntries.filter((entry) => entry.type === 'mood' && Number(entry.moodScore) <= 4);
   const windowMs = 4 * 60 * 60 * 1000;
   for (const mood of lows) {
     const at = Date.parse(mood.occurredAt);
@@ -1014,7 +1540,8 @@ function renderCorrelations() {
       return Number.isFinite(eaten) && eaten <= at && at - eaten <= windowMs;
     });
     if (meal) {
-      el.textContent = `A mood of ${mood.moodScore} lined up within 4 hours of ${meal.description}.`;
+      const mealName = meal.description || (Array.isArray(meal.foods) ? meal.foods.join(', ') : 'a meal');
+      el.textContent = `A mood of ${mood.moodScore} lined up within 4 hours of ${mealName}.`;
       return;
     }
   }
@@ -1032,6 +1559,10 @@ function bindShell() {
   document.querySelector('.actions').addEventListener('click', (event) => {
     const button = event.target.closest('[data-open]');
     if (!button) return;
+    if (button.dataset.open === 'location') {
+      void pingLocation();
+      return;
+    }
     openCheckIn(button.dataset.open);
   });
   document.getElementById('checkin-close').addEventListener('click', closeCheckIn);
