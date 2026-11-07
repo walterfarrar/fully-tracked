@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app5" />
+    <link rel="stylesheet" href="styles.css?v=app6" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -27,8 +27,11 @@
           </div>
         </section>
 
-        <section id="view-log" class="view" hidden aria-label="Log">
-          <h2>Log</h2>
+        <div id="checkin" class="checkin" hidden role="dialog" aria-modal="true" aria-labelledby="checkin-heading">
+          <div class="checkin-bar">
+            <h2 id="checkin-heading">Check-in</h2>
+            <button type="button" id="checkin-close">Close</button>
+          </div>
           <section class="log-panel" id="location" data-panel="location" hidden aria-labelledby="location-heading">
             <div class="section-head">
               <h3 id="location-heading">Location</h3>
@@ -170,7 +173,10 @@
             <p class="form-error" role="alert"></p>
             <button type="submit">Save sleep</button>
           </form>
+        </div>
 
+        <section id="view-log" class="view" hidden aria-label="Log">
+          <h2>Log</h2>
           <section class="journal" aria-labelledby="journal-heading">
             <div class="section-head">
               <h3 id="journal-heading">Recent</h3>
@@ -266,6 +272,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app10"></script>
+    <script src="app.js?v=app11"></script>
   </body>
 </html>

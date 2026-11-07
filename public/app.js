@@ -776,7 +776,8 @@ function bindForm(id, build) {
       form.reset();
       setDefaultTimes();
       syncBristol();
-      await refreshAll({ scroll: true });
+      closeCheckIn();
+      await refreshAll();
     } catch (err) {
       error.textContent = offlinePreview(err)
         ? 'This preview does not store entries.'
@@ -905,7 +906,30 @@ async function readStepReading() {
   }
 }
 
+function openCheckIn(kind) {
+  const layer = document.getElementById('checkin');
+  if (!layer) return;
+  document.querySelectorAll('.log-panel').forEach((el) => {
+    el.hidden = el.dataset.panel !== kind;
+  });
+  const heading = document.getElementById('checkin-heading');
+  const source = document.querySelector(`.actions button[data-open="${kind}"]`);
+  if (heading && source) heading.textContent = source.textContent;
+  layer.hidden = false;
+  setDefaultTimes();
+  if (kind === 'bathroom') syncBristol();
+  const panel = layer.querySelector('.log-panel:not([hidden])');
+  const field = panel && panel.querySelector('input, select, textarea');
+  if (field) field.focus();
+}
+
+function closeCheckIn() {
+  const layer = document.getElementById('checkin');
+  if (layer) layer.hidden = true;
+}
+
 function showView(name) {
+  closeCheckIn();
   document.querySelectorAll('.view').forEach((el) => {
     const on = el.id === `view-${name}`;
     el.hidden = !on;
@@ -921,13 +945,6 @@ function showView(name) {
     }, 60);
   }
   if (name === 'graphs') showMetric(activeMetric);
-}
-
-function showLog(kind) {
-  document.querySelectorAll('.log-panel').forEach((el) => {
-    el.hidden = el.dataset.panel !== kind;
-  });
-  showView('log');
 }
 
 function showMetric(key) {
@@ -969,16 +986,18 @@ function bindShell() {
   document.querySelector('.tabs').addEventListener('click', (event) => {
     const button = event.target.closest('[data-view]');
     if (!button) return;
-    if (button.dataset.view === 'log' && !document.querySelector('.log-panel:not([hidden])')) {
-      showLog('meal');
-      return;
-    }
     showView(button.dataset.view);
   });
   document.querySelector('.actions').addEventListener('click', (event) => {
     const button = event.target.closest('[data-open]');
     if (!button) return;
-    showLog(button.dataset.open);
+    openCheckIn(button.dataset.open);
+  });
+  document.getElementById('checkin-close').addEventListener('click', closeCheckIn);
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const layer = document.getElementById('checkin');
+    if (layer && !layer.hidden) closeCheckIn();
   });
   document.getElementById('metrics').addEventListener('click', (event) => {
     const button = event.target.closest('[data-metric]');
