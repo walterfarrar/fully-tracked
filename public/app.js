@@ -406,9 +406,9 @@ function ensureMap() {
   frame.hidden = false;
   if (!map) {
     map = L.map(frame, { scrollWheelZoom: false }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
     const icon = L.icon({
