@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app12" />
+    <link rel="stylesheet" href="styles.css?v=app13" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -416,6 +416,39 @@
           <h2 id="corr-heading">Correlations</h2>
           <p id="correlation-sentence" class="lede">Log meals and a low mood to see whether they line up.</p>
         </section>
+
+        <section id="view-analyze" class="view" hidden aria-labelledby="analyze-heading">
+          <h2 id="analyze-heading">Analyze</h2>
+          <form id="analyze-form" class="entry-form">
+            <div class="field">
+              <label for="analyze-question">Question</label>
+              <textarea id="analyze-question" maxlength="4000" required></textarea>
+            </div>
+            <div class="field">
+              <label>Model</label>
+              <div id="analyze-models" class="choice-list" role="group" aria-label="Model">
+                <button type="button" data-model="Opus 5.5" aria-pressed="true">Opus 5.5</button>
+                <button type="button" data-model="Grok 4.7" aria-pressed="false">Grok 4.7</button>
+                <button type="button" data-model="GPT 6.1" aria-pressed="false">GPT 6.1</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="analyze-key-anthropic">Anthropic key</label>
+              <input id="analyze-key-anthropic" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="analyze-key-xai">xAI key</label>
+              <input id="analyze-key-xai" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="analyze-key-openai">OpenAI key</label>
+              <input id="analyze-key-openai" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+            <p class="form-error" id="analyze-error" role="alert"></p>
+            <button type="submit">Analyze</button>
+          </form>
+          <p id="analyze-result" class="lede"></p>
+        </section>
       </div>
 
       <nav class="tabs" aria-label="Sections">
@@ -424,11 +457,12 @@
         <button type="button" class="tab" data-view="graphs" aria-label="Graphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V10M12 19V5M19 19v-7"/></svg></button>
         <button type="button" class="tab" data-view="map" aria-label="Map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.4 6-10a6 6 0 1 0-12 0c0 4.6 6 10 6 10z"/><circle cx="12" cy="11" r="1.8"/></svg></button>
         <button type="button" class="tab" data-view="correlations" aria-label="Compare"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/></svg></button>
+        <button type="button" class="tab" data-view="analyze" aria-label="Analyze">Analyze</button>
       </nav>
     </div>
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app22"></script>
+    <script src="app.js?v=app23"></script>
   </body>
 </html>

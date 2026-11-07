@@ -7,6 +7,7 @@ enum Screen: String, CaseIterable, Identifiable {
     case graphs
     case map
     case correlations
+    case analyze
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .graphs: "Graphs"
         case .map: "Map"
         case .correlations: "Correlations"
+        case .analyze: "Analyze"
         }
     }
 }
@@ -64,6 +66,8 @@ struct RootView: View {
                     MapScreen()
                 case .correlations:
                     CorrelationsView()
+                case .analyze:
+                    AnalyzeView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

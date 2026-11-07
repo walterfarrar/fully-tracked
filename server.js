@@ -679,6 +679,152 @@ function createApp(db) {
     sendJson(res, 200, buildTrends(entries, days, offsetMinutes));
   }
 
+  const ANALYZE_MODELS = {
+    'Opus 5.5': { provider: 'anthropic', id: 'claude-opus-5-5' },
+    'Grok 4.7': { provider: 'xai', id: 'grok-4.7' },
+    'GPT 6.1': { provider: 'openai', id: 'gpt-6.1-sol' },
+  };
+
+  function locationPrompt(question, locations) {
+    const rows = locations.map((item) => ({
+      latitude: item.latitude,
+      longitude: item.longitude,
+      accuracy: item.accuracy,
+      time: item.time,
+      altitude: item.altitude,
+    }));
+    return `Answer the question using only these location check-ins. Each item has latitude, longitude, accuracy in meters, time, and altitude in meters or null.\n\nQuestion: ${question}\n\nLocations:\n${JSON.stringify(rows)}`;
+  }
+
+  function providerText(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    if (Array.isArray(payload.content)) {
+      return payload.content
+        .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text)
+        .join('\n')
+        .trim();
+    }
+    if (typeof payload.output_text === 'string' && payload.output_text.trim()) return payload.output_text.trim();
+    if (Array.isArray(payload.output)) {
+      const bits = [];
+      for (const item of payload.output) {
+        const content = item && Array.isArray(item.content) ? item.content : [];
+        for (const part of content) {
+          if (part && part.type === 'output_text' && typeof part.text === 'string') bits.push(part.text);
+        }
+      }
+      if (bits.length) return bits.join('\n').trim();
+    }
+    const content = payload.choices && payload.choices[0] && payload.choices[0].message
+      ? payload.choices[0].message.content
+      : '';
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+      return content.map((part) => (part && typeof part.text === 'string' ? part.text : '')).join('\n').trim();
+    }
+    return '';
+  }
+
+  async function forwardAnalysis(choice, apiKey, question, locations) {
+    const prompt = locationPrompt(question, locations);
+    const headers = { 'Content-Type': 'application/json' };
+    let url;
+    let body;
+    if (choice.provider === 'anthropic') {
+      url = 'https://api.anthropic.com/v1/messages';
+      headers['x-api-key'] = apiKey;
+      headers['anthropic-version'] = '2023-06-01';
+      body = {
+        model: choice.id,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      };
+    } else if (choice.provider === 'xai') {
+      url = 'https://api.x.ai/v1/responses';
+      headers.Authorization = `Bearer ${apiKey}`;
+      body = {
+        model: choice.id,
+        input: prompt,
+        store: false,
+      };
+    } else {
+      url = 'https://api.openai.com/v1/chat/completions';
+      headers.Authorization = `Bearer ${apiKey}`;
+      body = {
+        model: choice.id,
+        messages: [{ role: 'user', content: prompt }],
+      };
+    }
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60000),
+      });
+    } catch {
+      throw new HttpError(502, 'The provider could not be reached.');
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const raw = payload && payload.error
+        ? (payload.error.message || payload.error.type || 'The provider rejected the request.')
+        : 'The provider rejected the request.';
+      const message = String(raw).includes(apiKey) ? 'The provider rejected the request.' : String(raw).slice(0, 500);
+      throw new HttpError(502, message);
+    }
+    const analysis = providerText(payload);
+    if (!analysis) throw new HttpError(502, 'The provider returned no text.');
+    return analysis;
+  }
+
+  function cleanLocations(value) {
+    if (!Array.isArray(value)) throw new HttpError(400, 'locations must be a list.');
+    return value.slice(0, 2000).map((item) => {
+      if (!item || typeof item !== 'object') throw new HttpError(400, 'A location check-in is not valid.');
+      const latitude = Number(item.latitude);
+      const longitude = Number(item.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new HttpError(400, 'A location check-in is missing coordinates.');
+      }
+      const accuracy = item.accuracy == null || item.accuracy === '' ? null : Number(item.accuracy);
+      const altitude = item.altitude == null || item.altitude === '' ? null : Number(item.altitude);
+      return {
+        latitude,
+        longitude,
+        accuracy: Number.isFinite(accuracy) ? accuracy : null,
+        time: typeof item.time === 'string' ? item.time : null,
+        altitude: Number.isFinite(altitude) ? altitude : null,
+      };
+    });
+  }
+
+  async function handleAnalyze(req, res) {
+    if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
+    let body;
+    try {
+      body = JSON.parse(await readBody(req));
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(400, 'Request body must be JSON.');
+    }
+    if (body && body.probe === true) {
+      sendJson(res, 200, { proxy: true });
+      return;
+    }
+    const choice = ANALYZE_MODELS[body && body.model];
+    if (!choice) throw new HttpError(400, 'Choose Opus 5.5, Grok 4.7, or GPT 6.1.');
+    const apiKey = typeof (body && body.apiKey) === 'string' ? body.apiKey.trim() : '';
+    if (!apiKey) throw new HttpError(400, 'The key for that model is missing.');
+    const question = typeof (body && body.question) === 'string' ? body.question.trim() : '';
+    if (!question) throw new HttpError(400, 'Enter a question.');
+    const locations = cleanLocations(body.locations);
+    const analysis = await forwardAnalysis(choice, apiKey, question, locations);
+    sendJson(res, 200, { analysis, model: choice.id });
+  }
+
   function handleStepsReading(req, res) {
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed.');
     const reading = readDailyStepTotals();
@@ -695,6 +841,7 @@ function createApp(db) {
     if (url.pathname === '/api/entries') return handleEntries(req, res, url);
     if (url.pathname === '/api/trends') return handleTrends(req, res, url);
     if (url.pathname === '/api/steps/reading') return handleStepsReading(req, res);
+    if (url.pathname === '/api/analyze') return handleAnalyze(req, res);
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       throw new HttpError(405, 'Method not allowed.');
     }

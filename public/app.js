@@ -2369,6 +2369,7 @@ async function boot() {
   bindSearch();
   bindRange();
   bindTracking();
+  bindAnalyze();
   try {
     await refreshAll();
   } catch (error) {
@@ -2382,6 +2383,128 @@ async function boot() {
     startTracking();
   }
   readStepReading().finally(scheduleStepReads);
+}
+
+const ANALYZE_KEYS = {
+  'Opus 5.5': 'fully-tracked-key-anthropic',
+  'Grok 4.7': 'fully-tracked-key-xai',
+  'GPT 6.1': 'fully-tracked-key-openai',
+};
+const ANALYZE_KEY_INPUTS = {
+  'Opus 5.5': 'analyze-key-anthropic',
+  'Grok 4.7': 'analyze-key-xai',
+  'GPT 6.1': 'analyze-key-openai',
+};
+let analyzeModel = 'Opus 5.5';
+
+function locationFacts() {
+  return allEntries
+    .filter((entry) => entry.type === 'location' && Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude))
+    .map((entry) => ({
+      latitude: entry.latitude,
+      longitude: entry.longitude,
+      accuracy: Number.isFinite(entry.accuracyMeters) ? entry.accuracyMeters : null,
+      time: entry.occurredAt || null,
+      altitude: Number.isFinite(entry.altitude) ? entry.altitude : null,
+    }));
+}
+
+function bindAnalyze() {
+  Object.entries(ANALYZE_KEY_INPUTS).forEach(([model, id]) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    const stored = localStorage.getItem(ANALYZE_KEYS[model]);
+    if (stored) input.value = stored;
+    input.addEventListener('input', () => {
+      const value = input.value.trim();
+      if (value) localStorage.setItem(ANALYZE_KEYS[model], value);
+      else localStorage.removeItem(ANALYZE_KEYS[model]);
+    });
+  });
+  document.getElementById('analyze-models').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-model]');
+    if (!button) return;
+    analyzeModel = button.dataset.model;
+    document.querySelectorAll('#analyze-models button').forEach((el) => {
+      el.setAttribute('aria-pressed', el === button ? 'true' : 'false');
+    });
+  });
+  document.getElementById('analyze-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    void runAnalysis();
+  });
+}
+
+function analyzeMessage(text, isError) {
+  const result = document.getElementById('analyze-result');
+  const error = document.getElementById('analyze-error');
+  if (isError) {
+    if (result) result.textContent = '';
+    if (error) error.textContent = text;
+    return;
+  }
+  if (error) error.textContent = '';
+  if (result) result.textContent = text;
+}
+
+async function runAnalysis() {
+  const question = document.getElementById('analyze-question').value.trim();
+  const keyInput = document.getElementById(ANALYZE_KEY_INPUTS[analyzeModel]);
+  const keyName = ANALYZE_KEYS[analyzeModel];
+  const key = keyInput ? keyInput.value.trim() : '';
+  if (keyName) {
+    if (key) localStorage.setItem(keyName, key);
+    else localStorage.removeItem(keyName);
+  }
+  if (!question) {
+    analyzeMessage('Enter a question.', true);
+    return;
+  }
+  if (!key) {
+    analyzeMessage(`Add your key for ${analyzeModel}.`, true);
+    return;
+  }
+  const button = document.querySelector('#analyze-form button[type="submit"]');
+  if (button) button.disabled = true;
+  analyzeMessage('', false);
+  try {
+    let probe;
+    try {
+      probe = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ probe: true }),
+        cache: 'no-store',
+      });
+    } catch {
+      analyzeMessage('This page cannot complete the AI call. GitHub Pages has no analysis proxy, so the key was not sent.', true);
+      return;
+    }
+    const probeData = await probe.json().catch(() => ({}));
+    if (!probe.ok || !probeData.proxy) {
+      analyzeMessage('This page cannot complete the AI call. GitHub Pages has no analysis proxy, so the key was not sent.', true);
+      return;
+    }
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        model: analyzeModel,
+        apiKey: key,
+        locations: locationFacts(),
+      }),
+      cache: 'no-store',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      analyzeMessage(data.error || 'The analysis call failed.', true);
+      return;
+    }
+    analyzeMessage(data.analysis || 'The provider returned no text.', false);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 boot();

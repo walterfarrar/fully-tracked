@@ -137,6 +137,8 @@ h3 { font-size: 1.15rem; }
 
 .lede { margin: 0.9rem 0 0; font-size: 1.2rem; color: var(--ink); max-width: 28rem; }
 
+#analyze-result { white-space: pre-wrap; }
+
 .note, .hint { margin: 0.7rem 0 0; }
 
 .section-head {
