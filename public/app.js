@@ -1672,6 +1672,44 @@ function readPosition() {
   });
 }
 
+async function trackLocationOnce() {
+  const button = document.getElementById('track-location');
+  if (button) button.disabled = true;
+  try {
+    const position = await readPosition();
+    const { latitude, longitude, accuracy } = position.coords;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0) {
+      showBanner('The device returned a reading without a usable accuracy, so it was not saved.');
+      return;
+    }
+    await getJson('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'location',
+        occurredAt: new Date(position.timestamp || Date.now()).toISOString(),
+        latitude,
+        longitude,
+        accuracyMeters: accuracy,
+        source: 'device',
+        manual: true,
+      }),
+    });
+    showBanner('');
+    try {
+      await refreshAll();
+    } catch (error) {
+      if (!offlinePreview(error)) showBanner(error.message);
+    }
+    if (ensureMap()) map.setView([latitude, longitude], map.getZoom(), { animate: false });
+  } catch (error) {
+    const fromDevice = error && (error.code === 1 || error.code === 2 || error.code === 3);
+    showBanner(fromDevice ? 'Location was not recorded.' : (error.message || 'Location was not recorded.'));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function pingLocation() {
   const button = document.querySelector('[data-open="location"]');
   const note = document.getElementById('home-note');
@@ -1796,14 +1834,6 @@ function syncTrackToggle() {
     const on = button.dataset.track === 'on';
     button.setAttribute('aria-pressed', (on ? tracking : !tracking) ? 'true' : 'false');
   });
-  syncMapTracking();
-}
-
-function syncMapTracking() {
-  const button = document.getElementById('track-location');
-  if (!button) return;
-  button.setAttribute('aria-pressed', tracking ? 'true' : 'false');
-  button.textContent = tracking ? 'Tracking on' : 'Track location';
 }
 
 function syncFollowToggle() {
@@ -2110,12 +2140,7 @@ function bindTracking() {
     }
   });
   document.getElementById('track-location').addEventListener('click', () => {
-    if (tracking) {
-      syncMapTracking();
-      if (mapTabOpen()) startHereWatch();
-      return;
-    }
-    void startTracking();
+    void trackLocationOnce();
   });
   document.getElementById('track-toggle').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-track]');
