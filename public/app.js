@@ -105,10 +105,54 @@ function fromDatetimeLocal(value) {
   return date.toISOString();
 }
 
+function formatCheckInWhen(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function syncWhenDisplay(input) {
+  const display = input.closest('.when-control');
+  const text = display && display.querySelector('.when-display');
+  if (text) text.textContent = formatCheckInWhen(input.value);
+}
+
 function setDefaultTimes() {
   const value = toDatetimeLocal(new Date());
   document.querySelectorAll('input[type="datetime-local"]').forEach((input) => {
     if (!input.value) input.value = value;
+    syncWhenDisplay(input);
+  });
+}
+
+function stampCheckInTimes() {
+  const value = toDatetimeLocal(new Date());
+  document.querySelectorAll('#checkin input[type="datetime-local"]').forEach((input) => {
+    input.value = value;
+    syncWhenDisplay(input);
+  });
+}
+
+function bindWhenDisplays() {
+  document.querySelectorAll('#checkin .when-control').forEach((control) => {
+    const input = control.querySelector('input[type="datetime-local"]');
+    const display = control.querySelector('.when-display');
+    if (!input || !display) return;
+    const refresh = () => syncWhenDisplay(input);
+    input.addEventListener('input', refresh);
+    input.addEventListener('change', refresh);
+    display.addEventListener('click', () => {
+      if (typeof input.showPicker === 'function') {
+        try {
+          input.showPicker();
+          return;
+        } catch {
+          input.focus();
+        }
+      } else {
+        input.focus();
+      }
+    });
   });
 }
 
@@ -916,11 +960,8 @@ function openCheckIn(kind) {
   const source = document.querySelector(`.actions button[data-open="${kind}"]`);
   if (heading && source) heading.textContent = source.textContent;
   layer.hidden = false;
-  setDefaultTimes();
+  stampCheckInTimes();
   if (kind === 'bathroom') syncBristol();
-  const panel = layer.querySelector('.log-panel:not([hidden])');
-  const field = panel && panel.querySelector('input, select, textarea');
-  if (field) field.focus();
 }
 
 function closeCheckIn() {
@@ -994,8 +1035,11 @@ function bindShell() {
     openCheckIn(button.dataset.open);
   });
   document.getElementById('checkin-close').addEventListener('click', closeCheckIn);
+  bindWhenDisplays();
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    const active = document.activeElement;
+    if (active && active.type === 'datetime-local') return;
     const layer = document.getElementById('checkin');
     if (layer && !layer.hidden) closeCheckIn();
   });

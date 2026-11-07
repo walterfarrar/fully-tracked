@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app6" />
+    <link rel="stylesheet" href="styles.css?v=app7" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -52,8 +52,11 @@
           <form id="meal-form" class="entry-form log-panel" data-panel="meal" hidden>
             <h3>Meal</h3>
             <div class="field">
-              <label for="meal-when">When</label>
-              <input id="meal-when" name="occurredAt" type="datetime-local" required step="60" />
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="meal-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
             </div>
             <div class="field">
               <label for="meal-description">What you ate</label>
@@ -66,8 +69,11 @@
           <form id="water-form" class="entry-form log-panel" data-panel="water" hidden>
             <h3>Water</h3>
             <div class="field">
-              <label for="water-when">When</label>
-              <input id="water-when" name="occurredAt" type="datetime-local" required step="60" />
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="water-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
             </div>
             <div class="field">
               <label for="water-amount">Amount (ml)</label>
@@ -80,8 +86,11 @@
           <form id="bathroom-form" class="entry-form log-panel" data-panel="bathroom" hidden>
             <h3>Bathroom</h3>
             <div class="field">
-              <label for="bath-when">When</label>
-              <input id="bath-when" name="occurredAt" type="datetime-local" required step="60" />
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="bath-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
             </div>
             <div class="field">
               <label for="bath-kind">Kind</label>
@@ -116,8 +125,11 @@
           <form id="life-form" class="entry-form log-panel" data-panel="life" hidden>
             <h3>Life event</h3>
             <div class="field">
-              <label for="life-when">When</label>
-              <input id="life-when" name="occurredAt" type="datetime-local" required step="60" />
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="life-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
             </div>
             <div class="field">
               <label for="life-title">Title</label>
@@ -134,8 +146,11 @@
           <form id="mood-form" class="entry-form log-panel" data-panel="mood" hidden>
             <h3>Mood</h3>
             <div class="field">
-              <label for="mood-when">When</label>
-              <input id="mood-when" name="occurredAt" type="datetime-local" required step="60" />
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="mood-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
             </div>
             <div class="field">
               <label for="mood-score">Score</label>
@@ -159,8 +174,11 @@
           <form id="sleep-form" class="entry-form log-panel" data-panel="sleep" hidden>
             <h3>Sleep</h3>
             <div class="field">
-              <label for="sleep-when">When</label>
-              <input id="sleep-when" name="occurredAt" type="datetime-local" required step="60" />
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="sleep-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
             </div>
             <div class="field">
               <label for="sleep-hours">Hours slept</label>
@@ -272,6 +290,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app11"></script>
+    <script src="app.js?v=app12"></script>
   </body>
 </html>
