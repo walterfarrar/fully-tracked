@@ -88,12 +88,19 @@ struct ScreenNav: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Screen.allCases) { item in
-                Button(item.title) {
+                Button {
                     screen = item
+                } label: {
+                    if item == .analyze {
+                        AnalyzeBarIcon()
+                    } else {
+                        Text(item.title)
+                    }
                 }
                 .buttonStyle(.plain)
                 .font(Theme.font(13))
                 .foregroundStyle(screen == item ? Theme.ink : Theme.muted)
+                .accessibilityLabel(item.title)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .overlay(alignment: .top) {
@@ -107,5 +114,32 @@ struct ScreenNav: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Theme.line).frame(height: 1)
         }
+    }
+}
+
+private struct AnalyzeBarIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let scale = size.width / 24
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: x * scale, y: y * scale)
+            }
+            var lens = Path()
+            lens.addEllipse(in: CGRect(x: 5.25 * scale, y: 5.25 * scale, width: 10.5 * scale, height: 10.5 * scale))
+            var handle = Path()
+            handle.move(to: point(14.5, 14.5))
+            handle.addLine(to: point(19.5, 19.5))
+            var lines = Path()
+            lines.move(to: point(8.2, 10.5))
+            lines.addLine(to: point(12.8, 10.5))
+            lines.move(to: point(8.7, 8.6))
+            lines.addLine(to: point(12.3, 8.6))
+            let style = StrokeStyle(lineWidth: 1.75 * scale, lineCap: .round, lineJoin: .round)
+            context.stroke(lens, with: .foreground, style: style)
+            context.stroke(handle, with: .foreground, style: style)
+            context.stroke(lines, with: .foreground, style: style)
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityHidden(true)
     }
 }
