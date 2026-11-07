@@ -40,7 +40,9 @@ let dataToken = 0;
 let map = null;
 let markerLayer = null;
 let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
-let mappedCount = -1;
+let mapFocusToken = 0;
+const MAP_FOCUS_ZOOM = 16;
+const CELL_DEGREES = 0.005;
 
 const intervalInput = document.getElementById('interval');
 const trackStatus = document.getElementById('track-status');
@@ -423,17 +425,91 @@ function showDeviceOnMap(latitude, longitude) {
   window.setTimeout(() => map.invalidateSize(), 0);
 }
 
-function renderMap(entries) {
-  const points = entries.filter(
+function locationPoints(entries) {
+  return (entries || []).filter(
     (entry) => entry.type === 'location'
       && Number.isFinite(entry.latitude)
       && Number.isFinite(entry.longitude)
   );
+}
+
+function heatCellsFor(points) {
+  const cells = new Map();
+  for (const point of points) {
+    const south = Math.floor(point.latitude / CELL_DEGREES) * CELL_DEGREES;
+    const west = Math.floor(point.longitude / CELL_DEGREES) * CELL_DEGREES;
+    const key = `${south.toFixed(5)},${west.toFixed(5)}`;
+    const cell = cells.get(key) || {
+      south,
+      west,
+      north: south + CELL_DEGREES,
+      east: west + CELL_DEGREES,
+      count: 0,
+    };
+    cell.count += 1;
+    cells.set(key, cell);
+  }
+  return [...cells.values()];
+}
+
+function frameSavedCheckIns() {
+  if (!map) return;
+  const points = locationPoints(allEntries);
+  const cells = heatCellsFor(points);
+  if (!points.length || !cells.length) return;
+  if (points.length === 1) {
+    map.setView([points[0].latitude, points[0].longitude], MAP_FOCUS_ZOOM);
+    return;
+  }
+  if (cells.length === 1) {
+    const cell = cells[0];
+    map.setView([(cell.south + cell.north) / 2, (cell.west + cell.east) / 2], MAP_FOCUS_ZOOM);
+    return;
+  }
+  const bounds = L.latLngBounds([]);
+  cells.forEach((cell) => {
+    bounds.extend([cell.south, cell.west]);
+    bounds.extend([cell.north, cell.east]);
+  });
+  map.fitBounds(bounds.pad(0.25));
+}
+
+function mapTabOpen() {
+  const view = document.getElementById('view-map');
+  return Boolean(view && !view.hidden);
+}
+
+async function focusMapOnOpen() {
+  const token = ++mapFocusToken;
+  if (!ensureMap()) return;
+  map.invalidateSize();
+  frameSavedCheckIns();
+  try {
+    const position = await readPosition();
+    if (token !== mapFocusToken || !map || !mapTabOpen()) return;
+    const { latitude, longitude } = position.coords;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      frameSavedCheckIns();
+      return;
+    }
+    map.setView([latitude, longitude], MAP_FOCUS_ZOOM);
+    if (!locationPoints(allEntries).length) {
+      setMapNote('Centered on this device. Visited cells darken with each check-in.');
+    }
+    window.setTimeout(() => map.invalidateSize(), 0);
+  } catch {
+    if (token !== mapFocusToken || !map || !mapTabOpen()) return;
+    map.invalidateSize();
+    frameSavedCheckIns();
+  }
+}
+
+function renderMap(entries) {
+  const points = locationPoints(entries);
   const count = document.getElementById('map-count');
   if (!ensureMap()) return;
   if (!points.length) {
     count.textContent = '';
-    mappedCount = 0;
     markerLayer.clearLayers();
     setMapNote(mapNote || 'Allow location to center this map. Visited cells darken with each check-in.');
     window.setTimeout(() => map.invalidateSize(), 0);
@@ -442,16 +518,7 @@ function renderMap(entries) {
   setMapNote('');
   count.textContent = points.length === 1 ? '1 check-in' : `${points.length} check-ins`;
   markerLayer.clearLayers();
-  const cells = new Map();
-  for (const point of points) {
-    const south = Math.floor(point.latitude / 0.005) * 0.005;
-    const west = Math.floor(point.longitude / 0.005) * 0.005;
-    const key = `${south.toFixed(5)},${west.toFixed(5)}`;
-    const cell = cells.get(key) || { south, west, north: south + 0.005, east: west + 0.005, count: 0 };
-    cell.count += 1;
-    cells.set(key, cell);
-  }
-  const drawn = [...cells.values()];
+  const drawn = heatCellsFor(points);
   const busiest = drawn.reduce((max, cell) => Math.max(max, cell.count), 1);
   const shapes = drawn.map((cell) => {
     const mix = busiest <= 1 ? 0 : (cell.count - 1) / (busiest - 1);
@@ -467,12 +534,6 @@ function renderMap(entries) {
     }).bindPopup(label);
   });
   shapes.forEach((shape) => shape.addTo(markerLayer));
-  if (points.length !== mappedCount) {
-    const bounds = L.latLngBounds(shapes.map((shape) => shape.getBounds()));
-    if (drawn.length === 1) map.fitBounds(bounds.pad(0.8));
-    else map.fitBounds(bounds.pad(0.25));
-    mappedCount = points.length;
-  }
   window.setTimeout(() => map.invalidateSize(), 0);
 }
 
@@ -855,7 +916,9 @@ function showView(name) {
   });
   if (name === 'map') {
     ensureMap();
-    if (map) window.setTimeout(() => map.invalidateSize(), 60);
+    window.setTimeout(() => {
+      if (mapTabOpen()) void focusMapOnOpen();
+    }, 60);
   }
   if (name === 'graphs') showMetric(activeMetric);
 }
