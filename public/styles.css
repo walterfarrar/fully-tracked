@@ -465,6 +465,19 @@ input[type="range"] {
 #open-settings.icon-button,
 .checkin-bar .icon-button { margin: 0; border-bottom: 0; }
 
+#open-settings { color: #d4b896; }
+
+#open-settings svg { width: 26px; height: 26px; }
+
+#open-settings svg,
+#open-settings svg * {
+  fill: none;
+  stroke: #d4b896;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .icon-button svg { width: 22px; height: 22px; display: block; }
 
 .icon-button svg,

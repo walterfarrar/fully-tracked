@@ -447,7 +447,7 @@ function addHydrationLabel() {
 }
 
 function showSettingsTab(name) {
-  const tab = name === 'food' || name === 'medication' ? name : 'hydration';
+  const tab = name === 'food' || name === 'medication' || name === 'location' ? name : 'hydration';
   document.querySelectorAll('[data-settings-tab]').forEach((button) => {
     button.setAttribute('aria-selected', button.dataset.settingsTab === tab ? 'true' : 'false');
   });
@@ -457,6 +457,7 @@ function showSettingsTab(name) {
   if (tab === 'hydration') renderHydrationSettings();
   if (tab === 'food') renderFoodSettings();
   if (tab === 'medication') renderSubstanceSettings();
+  if (tab === 'location') syncTrackToggle();
 }
 
 function openSettings(tab) {
@@ -1789,9 +1790,29 @@ async function keepScreenAwake() {
   }
 }
 
+function syncTrackToggle() {
+  document.querySelectorAll('#track-toggle button').forEach((button) => {
+    const on = button.dataset.track === 'on';
+    button.setAttribute('aria-pressed', (on ? tracking : !tracking) ? 'true' : 'false');
+  });
+}
+
+function stopTracking() {
+  tracking = false;
+  localStorage.setItem(TRACK_KEY, 'off');
+  clearTimer();
+  stopHereWatch();
+  clearHereMarker();
+  setStatus('Tracking is off.');
+  const status = document.getElementById('track-status');
+  if (status) status.hidden = false;
+  syncTrackToggle();
+}
+
 async function startTracking() {
   tracking = true;
   localStorage.setItem(TRACK_KEY, 'on');
+  syncTrackToggle();
   startHereWatch();
   clearTimer();
   void keepScreenAwake();
@@ -1807,8 +1828,10 @@ async function startTracking() {
 
 function restoreInterval() {
   const raw = localStorage.getItem(INTERVAL_KEY);
-  const saved = raw == null ? DEFAULT_MINUTES : Number(raw);
-  intervalInput.value = String(Number.isFinite(saved) ? saved : DEFAULT_MINUTES);
+  let saved = raw == null ? DEFAULT_MINUTES : Number(raw);
+  if (!Number.isFinite(saved)) saved = DEFAULT_MINUTES;
+  if (saved === 30) saved = 10;
+  intervalInput.value = String(saved);
   intervalMinutes();
 }
 
@@ -2049,6 +2072,17 @@ function bindRange() {
 }
 
 function bindTracking() {
+  document.getElementById('track-toggle').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-track]');
+    if (!button) return;
+    if (button.dataset.track === 'on') {
+      if (!tracking) void startTracking();
+      else syncTrackToggle();
+      return;
+    }
+    if (tracking) stopTracking();
+    else syncTrackToggle();
+  });
   intervalInput.addEventListener('change', () => {
     intervalMinutes();
     if (!tracking || recording) return;
@@ -2231,7 +2265,12 @@ async function boot() {
     if (offlinePreview(error)) showOfflinePreview();
     else showBanner(error.message);
   }
-  startTracking();
+  if (localStorage.getItem(TRACK_KEY) === 'off') {
+    tracking = false;
+    syncTrackToggle();
+  } else {
+    startTracking();
+  }
   readStepReading().finally(scheduleStepReads);
 }
 

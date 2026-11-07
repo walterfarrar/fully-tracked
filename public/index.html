@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app10" />
+    <link rel="stylesheet" href="styles.css?v=app11" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -17,7 +17,7 @@
           <p class="wordmark">Fully Tracked</p>
           <div class="section-head">
             <h1>Log</h1>
-            <button type="button" id="open-settings" class="icon-button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"/></svg></button>
+            <button type="button" id="open-settings" class="icon-button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.2 2.4h3.6l.45 2.15a7.2 7.2 0 0 1 1.85.78l2.05-1.05 2.55 2.55-1.05 2.05c.34.58.6 1.2.78 1.85l2.15.45v3.6l-2.15.45a7.2 7.2 0 0 1-.78 1.85l1.05 2.05-2.55 2.55-2.05-1.05a7.2 7.2 0 0 1-1.85.78l-.45 2.15h-3.6l-.45-2.15a7.2 7.2 0 0 1-1.85-.78l-2.05 1.05-2.55-2.55 1.05-2.05a7.2 7.2 0 0 1-.78-1.85L2 14.7v-3.6l2.15-.45a7.2 7.2 0 0 1 .78-1.85L3.88 6.75l2.55-2.55 2.05 1.05a7.2 7.2 0 0 1 1.85-.78L10.2 2.4z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
           </div>
           <div class="actions">
             <button type="button" data-open="location">
@@ -54,7 +54,6 @@
             </button>
           </div>
           <p id="home-note" class="note" hidden></p>
-          <input id="interval" type="number" min="5" max="10080" step="1" value="10" hidden>
           <p id="track-status" class="status" hidden></p>
         </section>
 
@@ -282,6 +281,7 @@
             <button type="button" role="tab" data-settings-tab="hydration" aria-selected="true">Hydration</button>
             <button type="button" role="tab" data-settings-tab="food" aria-selected="false">Food</button>
             <button type="button" role="tab" data-settings-tab="medication" aria-selected="false">Medication</button>
+            <button type="button" role="tab" data-settings-tab="location" aria-selected="false">Location</button>
           </div>
           <section class="entry-form" role="tabpanel" data-settings-panel="hydration">
             <p class="hint">Ounces per label.</p>
@@ -312,6 +312,19 @@
             </div>
             <div id="substance-units" class="choice-list"></div>
             <button type="button" id="substance-add">Add</button>
+          </section>
+          <section class="entry-form" role="tabpanel" data-settings-panel="location" hidden>
+            <div class="field">
+              <label for="interval">Minutes</label>
+              <input id="interval" type="number" min="5" max="10080" step="1" value="10" />
+            </div>
+            <div class="field">
+              <span id="track-label">Tracking</span>
+              <div class="toggle-group" id="track-toggle" role="group" aria-labelledby="track-label">
+                <button type="button" data-track="on" aria-pressed="false">On</button>
+                <button type="button" data-track="off" aria-pressed="true">Off</button>
+              </div>
+            </div>
           </section>
         </div>
 
@@ -412,6 +425,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app15"></script>
+    <script src="app.js?v=app16"></script>
   </body>
 </html>
