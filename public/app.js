@@ -29,6 +29,7 @@ const chartInstances = { water: null, meals: null, mood: null, sleep: null, step
 const STEPS_READ_MS = 30 * 60 * 1000;
 let stepsTimer = null;
 let rangeDays = 7;
+let activeMetric = 'water';
 let allEntries = [];
 let tracking = false;
 let recording = false;
@@ -275,6 +276,7 @@ function renderTrends(payload) {
       },
     });
   }
+  showMetric(activeMetric);
 }
 
 function escapeHtml(value) {
@@ -384,6 +386,7 @@ async function refreshAll(options = {}) {
   if (token !== dataToken) return;
   allEntries = all.entries;
   renderMap(allEntries);
+  renderCorrelations();
   if (listTok === listToken) renderList(listed.entries, query);
   if (trendTok === trendsToken) renderTrends(trends);
   if (options.scroll) {
@@ -704,6 +707,84 @@ async function readStepReading() {
   }
 }
 
+function showView(name) {
+  document.querySelectorAll('.view').forEach((el) => {
+    const on = el.id === `view-${name}`;
+    el.hidden = !on;
+    el.classList.toggle('is-active', on);
+  });
+  document.querySelectorAll('.tab').forEach((el) => {
+    el.setAttribute('aria-current', el.dataset.view === name ? 'page' : 'false');
+  });
+  if (name === 'map' && map) window.setTimeout(() => map.invalidateSize(), 60);
+  if (name === 'graphs') showMetric(activeMetric);
+}
+
+function showLog(kind) {
+  document.querySelectorAll('.log-panel').forEach((el) => {
+    el.hidden = el.dataset.panel !== kind;
+  });
+  showView('log');
+}
+
+function showMetric(key) {
+  if (!document.querySelector(`[data-chart="${key}"]`)) return;
+  activeMetric = key;
+  document.querySelectorAll('[data-metric]').forEach((el) => {
+    el.setAttribute('aria-pressed', el.dataset.metric === key ? 'true' : 'false');
+  });
+  document.querySelectorAll('.chart-card').forEach((el) => {
+    el.hidden = el.dataset.chart !== key;
+  });
+  const chart = chartInstances[key];
+  if (chart) window.setTimeout(() => chart.resize(), 40);
+}
+
+function renderCorrelations() {
+  const el = document.getElementById('correlation-sentence');
+  if (!el) return;
+  const meals = allEntries.filter((entry) => entry.type === 'meal' && entry.description);
+  const lows = allEntries.filter((entry) => entry.type === 'mood' && Number(entry.moodScore) <= 2);
+  const windowMs = 4 * 60 * 60 * 1000;
+  for (const mood of lows) {
+    const at = Date.parse(mood.occurredAt);
+    const meal = meals.find((item) => {
+      const eaten = Date.parse(item.occurredAt);
+      return Number.isFinite(eaten) && eaten <= at && at - eaten <= windowMs;
+    });
+    if (meal) {
+      el.textContent = `A mood of ${mood.moodScore} lined up within 4 hours of ${meal.description}.`;
+      return;
+    }
+  }
+  el.textContent = lows.length
+    ? 'Low moods are logged, and none fall within 4 hours of a meal.'
+    : 'Log meals and a low mood to see whether they line up.';
+}
+
+function bindShell() {
+  document.querySelector('.tabs').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-view]');
+    if (!button) return;
+    if (button.dataset.view === 'log' && !document.querySelector('.log-panel:not([hidden])')) {
+      showLog('meal');
+      return;
+    }
+    showView(button.dataset.view);
+  });
+  document.querySelector('.actions').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-open]');
+    if (!button) return;
+    showLog(button.dataset.open);
+  });
+  document.getElementById('metrics').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-metric]');
+    if (!button) return;
+    showMetric(button.dataset.metric);
+  });
+  showView('home');
+}
+
 async function boot() {
   if (!window.Chart || !window.L) {
     showBanner('Charts or the map did not load. Run npm install and restart the server.');
@@ -711,6 +792,7 @@ async function boot() {
   setDefaultTimes();
   syncBristol();
   restoreInterval();
+  bindShell();
   bindForms();
   bindSearch();
   bindRange();

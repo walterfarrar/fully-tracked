@@ -1,277 +1,272 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="background:#12110f;color:#f4f0ea">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#12110f" />
+    <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=app3" />
   </head>
-  <body>
-    <div class="wrap">
-      <header class="top" id="home">
-        <div class="top-row">
-          <p class="wordmark">Fully Tracked</p>
-          <nav class="nav" aria-label="Sections">
-            <a href="#home">Home</a>
-            <a href="#log">Log</a>
-            <a href="#trends">Trends</a>
-            <a href="#where">Map</a>
-          </nav>
-        </div>
-        <nav class="actions" aria-label="Log">
-          <a href="#location">Location</a>
-          <a href="#meal-form">Meal</a>
-          <a href="#water-form">Water</a>
-          <a href="#bathroom-form">Bathroom</a>
-          <a href="#life-form">Life event</a>
-          <a href="#mood-form">Mood</a>
-          <a href="#sleep-form">Sleep</a>
-          <a href="#steps-chart">Steps</a>
-          <a href="#where">Map</a>
-        </nav>
-      </header>
-
+  <body style="background:#12110f;color:#f4f0ea">
+    <div class="app">
       <p id="banner" class="banner" hidden></p>
+      <div class="views">
+        <section id="view-home" class="view is-active" aria-label="Home">
+          <p class="wordmark">Fully Tracked</p>
+          <h1>Log</h1>
+          <div class="actions">
+            <button type="button" data-open="location">Location</button>
+            <button type="button" data-open="meal">Meal</button>
+            <button type="button" data-open="water">Water</button>
+            <button type="button" data-open="bathroom">Bathroom</button>
+            <button type="button" data-open="life">Life event</button>
+            <button type="button" data-open="mood">Mood</button>
+            <button type="button" data-open="sleep">Sleep</button>
+          </div>
+        </section>
 
-      <section class="location-block" id="location" aria-labelledby="location-heading">
-        <div class="section-head">
-          <h2 id="location-heading">Location</h2>
-          <p class="eyebrow">Automatic · device only</p>
-        </div>
-        <p class="note">
-          Location tracking is always on. Check-ins follow the interval below and are not second by second.
-          Permission is asked once.
-        </p>
-        <div class="interval-row">
-          <label for="interval">Minutes between check-ins</label>
-          <input id="interval" type="number" min="5" max="10080" step="1" value="30" inputmode="numeric" />
-        </div>
-        <p class="hint">
-          Default 30. Minimum 5. Maximum 7 days. Tracking starts by itself and is remembered.
-          The first reading asks for permission once. After that, check-ins repeat on this interval
-          with no extra taps and no coordinates to type.
-        </p>
-        <p id="track-status" class="status" aria-live="polite"></p>
-      </section>
+        <section id="view-log" class="view" hidden aria-label="Log">
+          <h2>Log</h2>
+          <section class="log-panel" id="location" data-panel="location" hidden aria-labelledby="location-heading">
+            <div class="section-head">
+              <h3 id="location-heading">Location</h3>
+              <p class="eyebrow">Always on</p>
+            </div>
+            <p class="note">
+              Location tracking is always on. Check-ins follow the interval below and are not second by second.
+              Permission is asked once.
+            </p>
+            <div class="interval-row">
+              <label for="interval">Minutes between check-ins</label>
+              <input id="interval" type="number" min="5" max="10080" step="1" value="30" inputmode="numeric" />
+            </div>
+            <p class="hint">Default 30. Minimum 5. Maximum 7 days. Tracking starts by itself.</p>
+            <p id="track-status" class="status" aria-live="polite"></p>
+          </section>
 
-      <h2 class="group-title" id="log">Add an entry</h2>
-      <div class="forms">
-        <form id="meal-form" class="entry-form">
-          <h3>Meal</h3>
-          <div class="field">
-            <label for="meal-when">When</label>
-            <input id="meal-when" name="occurredAt" type="datetime-local" required step="60" />
-          </div>
-          <div class="field">
-            <label for="meal-description">What you ate</label>
-            <textarea id="meal-description" name="description" required maxlength="4000"></textarea>
-          </div>
-          <p class="form-error" role="alert"></p>
-          <button type="submit">Save meal</button>
-        </form>
+          <form id="meal-form" class="entry-form log-panel" data-panel="meal" hidden>
+            <h3>Meal</h3>
+            <div class="field">
+              <label for="meal-when">When</label>
+              <input id="meal-when" name="occurredAt" type="datetime-local" required step="60" />
+            </div>
+            <div class="field">
+              <label for="meal-description">What you ate</label>
+              <textarea id="meal-description" name="description" required maxlength="4000"></textarea>
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save meal</button>
+          </form>
 
-        <form id="water-form" class="entry-form">
-          <h3>Water</h3>
-          <div class="field">
-            <label for="water-when">When</label>
-            <input id="water-when" name="occurredAt" type="datetime-local" required step="60" />
-          </div>
-          <div class="field">
-            <label for="water-amount">Amount (ml)</label>
-            <input id="water-amount" name="amountMl" type="number" min="1" max="20000" step="1" required inputmode="numeric" />
-          </div>
-          <p class="form-error" role="alert"></p>
-          <button type="submit">Save water</button>
-        </form>
+          <form id="water-form" class="entry-form log-panel" data-panel="water" hidden>
+            <h3>Water</h3>
+            <div class="field">
+              <label for="water-when">When</label>
+              <input id="water-when" name="occurredAt" type="datetime-local" required step="60" />
+            </div>
+            <div class="field">
+              <label for="water-amount">Amount (ml)</label>
+              <input id="water-amount" name="amountMl" type="number" min="1" max="20000" step="1" required inputmode="numeric" />
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save water</button>
+          </form>
 
-        <form id="bathroom-form" class="entry-form">
-          <h3>Bathroom</h3>
-          <div class="field">
-            <label for="bath-when">When</label>
-            <input id="bath-when" name="occurredAt" type="datetime-local" required step="60" />
-          </div>
-          <div class="field">
-            <label for="bath-kind">Kind</label>
-            <select id="bath-kind" name="kind" required>
-              <option value="">Choose</option>
-              <option value="stool">Stool</option>
-              <option value="urine">Urine</option>
-            </select>
-          </div>
-          <div class="field" id="bristol-field">
-            <label for="bath-bristol">Bristol scale (optional)</label>
-            <select id="bath-bristol" name="bristolScale">
-              <option value="">Not set</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-              <option value="6">6</option>
-              <option value="7">7</option>
-            </select>
-            <p class="hint">Stool only. Types 1–7.</p>
-          </div>
-          <div class="field">
-            <label for="bath-note">Note (optional)</label>
-            <input id="bath-note" name="note" type="text" maxlength="2000" />
-          </div>
-          <p class="form-error" role="alert"></p>
-          <button type="submit">Save bathroom</button>
-        </form>
+          <form id="bathroom-form" class="entry-form log-panel" data-panel="bathroom" hidden>
+            <h3>Bathroom</h3>
+            <div class="field">
+              <label for="bath-when">When</label>
+              <input id="bath-when" name="occurredAt" type="datetime-local" required step="60" />
+            </div>
+            <div class="field">
+              <label for="bath-kind">Kind</label>
+              <select id="bath-kind" name="kind" required>
+                <option value="">Choose</option>
+                <option value="stool">Stool</option>
+                <option value="urine">Urine</option>
+              </select>
+            </div>
+            <div class="field" id="bristol-field">
+              <label for="bath-bristol">Bristol scale (optional)</label>
+              <select id="bath-bristol" name="bristolScale">
+                <option value="">Not set</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+              </select>
+              <p class="hint">Stool only. Types 1–7.</p>
+            </div>
+            <div class="field">
+              <label for="bath-note">Note (optional)</label>
+              <input id="bath-note" name="note" type="text" maxlength="2000" />
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save bathroom</button>
+          </form>
 
-        <form id="life-form" class="entry-form">
-          <h3>Life event</h3>
-          <div class="field">
-            <label for="life-when">When</label>
-            <input id="life-when" name="occurredAt" type="datetime-local" required step="60" />
-          </div>
-          <div class="field">
-            <label for="life-title">Title</label>
-            <input id="life-title" name="title" type="text" required maxlength="200" />
-          </div>
-          <div class="field">
-            <label for="life-description">Description</label>
-            <textarea id="life-description" name="description" required maxlength="4000"></textarea>
-          </div>
-          <p class="form-error" role="alert"></p>
-          <button type="submit">Save life event</button>
-        </form>
+          <form id="life-form" class="entry-form log-panel" data-panel="life" hidden>
+            <h3>Life event</h3>
+            <div class="field">
+              <label for="life-when">When</label>
+              <input id="life-when" name="occurredAt" type="datetime-local" required step="60" />
+            </div>
+            <div class="field">
+              <label for="life-title">Title</label>
+              <input id="life-title" name="title" type="text" required maxlength="200" />
+            </div>
+            <div class="field">
+              <label for="life-description">Description</label>
+              <textarea id="life-description" name="description" required maxlength="4000"></textarea>
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save life event</button>
+          </form>
 
-        <form id="mood-form" class="entry-form">
-          <h3>Mood</h3>
-          <div class="field">
-            <label for="mood-when">When</label>
-            <input id="mood-when" name="occurredAt" type="datetime-local" required step="60" />
-          </div>
-          <div class="field">
-            <label for="mood-score">Score</label>
-            <select id="mood-score" name="moodScore" required>
-              <option value="">Choose</option>
-              <option value="1">1 (low)</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5 (high)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="mood-note">Note (optional)</label>
-            <input id="mood-note" name="note" type="text" maxlength="2000" />
-          </div>
-          <p class="form-error" role="alert"></p>
-          <button type="submit">Save mood</button>
-        </form>
+          <form id="mood-form" class="entry-form log-panel" data-panel="mood" hidden>
+            <h3>Mood</h3>
+            <div class="field">
+              <label for="mood-when">When</label>
+              <input id="mood-when" name="occurredAt" type="datetime-local" required step="60" />
+            </div>
+            <div class="field">
+              <label for="mood-score">Score</label>
+              <select id="mood-score" name="moodScore" required>
+                <option value="">Choose</option>
+                <option value="1">1 (low)</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5 (high)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="mood-note">Note (optional)</label>
+              <input id="mood-note" name="note" type="text" maxlength="2000" />
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save mood</button>
+          </form>
 
-        <form id="sleep-form" class="entry-form">
-          <h3>Sleep</h3>
-          <div class="field">
-            <label for="sleep-when">When</label>
-            <input id="sleep-when" name="occurredAt" type="datetime-local" required step="60" />
+          <form id="sleep-form" class="entry-form log-panel" data-panel="sleep" hidden>
+            <h3>Sleep</h3>
+            <div class="field">
+              <label for="sleep-when">When</label>
+              <input id="sleep-when" name="occurredAt" type="datetime-local" required step="60" />
+            </div>
+            <div class="field">
+              <label for="sleep-hours">Hours slept</label>
+              <input id="sleep-hours" name="sleepHours" type="number" min="0.1" max="24" step="0.1" required inputmode="decimal" />
+            </div>
+            <div class="field">
+              <label for="sleep-note">Note (optional)</label>
+              <input id="sleep-note" name="note" type="text" maxlength="2000" />
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save sleep</button>
+          </form>
+
+          <section class="journal" aria-labelledby="journal-heading">
+            <div class="section-head">
+              <h3 id="journal-heading">Recent</h3>
+              <p id="entries-count" class="eyebrow"></p>
+            </div>
+            <form id="search-form" role="search">
+              <label for="q">Search</label>
+              <input id="q" type="search" placeholder="Type, meal, note, mood…" autocomplete="off" />
+            </form>
+            <p id="entries-empty" class="empty" hidden></p>
+            <div id="entries"></div>
+          </section>
+        </section>
+
+        <section id="view-graphs" class="view" hidden aria-labelledby="trends-heading">
+          <div class="section-head">
+            <h2 id="trends-heading">Graphs</h2>
+            <div id="range" class="range" role="group" aria-label="Chart range">
+              <button type="button" data-range="7" aria-pressed="true">7 days</button>
+              <button type="button" data-range="30" aria-pressed="false">30 days</button>
+            </div>
           </div>
-          <div class="field">
-            <label for="sleep-hours">Hours slept</label>
-            <input id="sleep-hours" name="sleepHours" type="number" min="0.1" max="24" step="0.1" required inputmode="decimal" />
+          <div id="metrics" class="metrics" role="group" aria-label="Metric">
+            <button type="button" data-metric="water" aria-pressed="true">Water</button>
+            <button type="button" data-metric="meals" aria-pressed="false">Meals</button>
+            <button type="button" data-metric="mood" aria-pressed="false">Mood</button>
+            <button type="button" data-metric="sleep" aria-pressed="false">Sleep</button>
+            <button type="button" data-metric="steps" aria-pressed="false">Steps</button>
           </div>
-          <div class="field">
-            <label for="sleep-note">Note (optional)</label>
-            <input id="sleep-note" name="note" type="text" maxlength="2000" />
+          <p id="steps-note" class="note">Apple Health is not available in this preview. No step count is shown until a saved daily total exists.</p>
+          <div class="chart-grid">
+            <article class="chart-card" data-chart="water">
+              <h3>Water</h3>
+              <p class="metric">Daily total (ml)</p>
+              <p class="chart-summary"></p>
+              <p class="chart-empty empty" hidden></p>
+              <div class="chart-wrap"><canvas aria-label="Water by day"></canvas></div>
+            </article>
+            <article class="chart-card" data-chart="meals" hidden>
+              <h3>Meals</h3>
+              <p class="metric">Daily count</p>
+              <p class="chart-summary"></p>
+              <p class="chart-empty empty" hidden></p>
+              <div class="chart-wrap"><canvas aria-label="Meals by day"></canvas></div>
+            </article>
+            <article class="chart-card" data-chart="mood" hidden>
+              <h3>Mood</h3>
+              <p class="metric">Daily average (1–5)</p>
+              <p class="chart-summary"></p>
+              <p class="chart-empty empty" hidden></p>
+              <div class="chart-wrap"><canvas aria-label="Mood by day"></canvas></div>
+            </article>
+            <article class="chart-card" data-chart="sleep" hidden>
+              <h3>Sleep</h3>
+              <p class="metric">Daily hours</p>
+              <p class="chart-summary"></p>
+              <p class="chart-empty empty" hidden></p>
+              <div class="chart-wrap"><canvas aria-label="Sleep by day"></canvas></div>
+            </article>
+            <article class="chart-card" data-chart="steps" hidden>
+              <h3>Steps</h3>
+              <p class="metric">Daily total</p>
+              <p class="chart-summary"></p>
+              <p class="chart-empty empty" hidden></p>
+              <div class="chart-wrap"><canvas aria-label="Steps by day"></canvas></div>
+            </article>
           </div>
-          <p class="form-error" role="alert"></p>
-          <button type="submit">Save sleep</button>
-        </form>
+        </section>
+
+        <section id="view-map" class="view view-map" hidden aria-labelledby="map-heading">
+          <div class="section-head">
+            <h2 id="map-heading">Map</h2>
+            <p id="map-count" class="eyebrow"></p>
+          </div>
+          <p class="hint">Each marker is a location check-in. Nothing is pinned by hand.</p>
+          <p id="map-empty" class="empty">No check-ins yet. Device readings show up here.</p>
+          <div id="map" class="map" hidden></div>
+        </section>
+
+        <section id="view-correlations" class="view" hidden aria-labelledby="corr-heading">
+          <h2 id="corr-heading">Correlations</h2>
+          <p id="correlation-sentence" class="lede">Log meals and a low mood to see whether they line up.</p>
+        </section>
       </div>
 
-      <section class="journal" aria-labelledby="journal-heading">
-        <div class="section-head">
-          <h2 id="journal-heading">Journal</h2>
-          <p id="entries-count" class="eyebrow"></p>
-        </div>
-        <form id="search-form" role="search">
-          <label for="q">Search</label>
-          <input id="q" type="search" placeholder="Type, meal, note, mood…" autocomplete="off" />
-        </form>
-        <p id="entries-empty" class="empty" hidden></p>
-        <div id="entries"></div>
-      </section>
-
-      <section class="trends" id="trends" aria-labelledby="trends-heading">
-        <div class="section-head">
-          <div>
-            <h2 id="trends-heading">Trends</h2>
-            <p class="hint">
-              Local days. Water is the day's milliliters, meals are a count, mood is the average
-              score, sleep is the hours logged that day, and steps are the day's total.
-            </p>
-            <p id="steps-note" class="note">
-              Apple Health is not available in this preview. No step count is shown until a saved daily total exists.
-            </p>
-          </div>
-          <div id="range" class="range" role="group" aria-label="Chart range">
-            <button type="button" data-range="7" aria-pressed="true">7 days</button>
-            <button type="button" data-range="30" aria-pressed="false">30 days</button>
-          </div>
-        </div>
-        <div class="chart-grid">
-          <article class="chart-card" id="steps-chart" data-chart="steps">
-            <h3>Steps</h3>
-            <p class="metric">Daily total</p>
-            <p class="chart-summary"></p>
-            <p class="chart-empty empty" hidden></p>
-            <div class="chart-wrap"><canvas aria-label="Steps by day"></canvas></div>
-          </article>
-          <article class="chart-card" data-chart="water">
-            <h3>Water</h3>
-            <p class="metric">Daily total (ml)</p>
-            <p class="chart-summary"></p>
-            <p class="chart-empty empty" hidden></p>
-            <div class="chart-wrap"><canvas aria-label="Water by day"></canvas></div>
-          </article>
-          <article class="chart-card" data-chart="meals">
-            <h3>Meals</h3>
-            <p class="metric">Daily count</p>
-            <p class="chart-summary"></p>
-            <p class="chart-empty empty" hidden></p>
-            <div class="chart-wrap"><canvas aria-label="Meals by day"></canvas></div>
-          </article>
-          <article class="chart-card" data-chart="mood">
-            <h3>Mood</h3>
-            <p class="metric">Daily average (1–5)</p>
-            <p class="chart-summary"></p>
-            <p class="chart-empty empty" hidden></p>
-            <div class="chart-wrap"><canvas aria-label="Mood by day"></canvas></div>
-          </article>
-          <article class="chart-card" data-chart="sleep">
-            <h3>Sleep</h3>
-            <p class="metric">Daily hours</p>
-            <p class="chart-summary"></p>
-            <p class="chart-empty empty" hidden></p>
-            <div class="chart-wrap"><canvas aria-label="Sleep by day"></canvas></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="where" id="where" aria-labelledby="map-heading">
-        <div class="section-head">
-          <h2 id="map-heading">Where this device has been</h2>
-          <p id="map-count" class="eyebrow"></p>
-        </div>
-        <p class="hint">
-          Each marker is a location check-in. There are no manual pins.
-          Map images come from OpenStreetMap and need no API key.
-        </p>
-        <p id="map-empty" class="empty">
-          No check-ins yet. When tracking is on, device readings show up here. Nothing is pinned by hand.
-        </p>
-        <div id="map" class="map" hidden></div>
-      </section>
-
-      <p class="footer">The journal file stays on this machine.</p>
+      <nav class="tabs" aria-label="Sections">
+        <button type="button" class="tab" data-view="home" aria-current="page">Home</button>
+        <button type="button" class="tab" data-view="log">Log</button>
+        <button type="button" class="tab" data-view="graphs">Graphs</button>
+        <button type="button" class="tab" data-view="map">Map</button>
+        <button type="button" class="tab" data-view="correlations">Compare</button>
+      </nav>
     </div>
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=app3"></script>
   </body>
 </html>
