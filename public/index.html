@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app8" />
+    <link rel="stylesheet" href="styles.css?v=app9" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -15,7 +15,10 @@
       <div class="views">
         <section id="view-home" class="view is-active" aria-label="Home">
           <p class="wordmark">Fully Tracked</p>
-          <h1>Log</h1>
+          <div class="section-head">
+            <h1>Log</h1>
+            <button type="button" id="open-settings">Settings</button>
+          </div>
           <div class="actions">
             <button type="button" data-open="location">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
@@ -110,8 +113,8 @@
             </div>
             <div class="field">
               <label>Amount</label>
-              <p class="hint">1 cup is 8 oz.</p>
               <div id="oz-choices" class="choice-list"></div>
+              <button type="button" id="open-amount-settings" class="settings-link">Amount settings</button>
             </div>
             <p class="form-error" role="alert"></p>
             <button type="submit">Save hydration</button>
@@ -193,6 +196,10 @@
             <div class="field">
               <label>Emotions</label>
               <div id="mood-tags" class="choice-list"></div>
+              <div class="add-row">
+                <input id="mood-emotion-new" type="text" maxlength="40" placeholder="Add an emotion" autocomplete="off" />
+                <button type="button" id="mood-emotion-add">Add</button>
+              </div>
             </div>
             <p class="form-error" role="alert"></p>
             <button type="submit">Save mood</button>
@@ -218,6 +225,23 @@
             <p class="form-error" role="alert"></p>
             <button type="submit">Save sleep</button>
           </form>
+        </div>
+
+        <div id="settings" class="checkin" hidden>
+          <div class="checkin-bar">
+            <h2>Settings</h2>
+            <button type="button" id="settings-close">Close</button>
+          </div>
+          <section class="entry-form">
+            <h3>Hydration amounts</h3>
+            <p class="hint">Each label has its own ounces. A saved check-in keeps the ounces from when it was saved.</p>
+            <div id="hydration-amount-rows"></div>
+            <div class="add-row">
+              <input id="hydration-label-new" type="text" maxlength="40" placeholder="Add a label" autocomplete="off" />
+              <input id="hydration-ounces-new" type="number" min="0.1" step="0.1" inputmode="decimal" placeholder="Ounces" aria-label="Ounces" />
+              <button type="button" id="hydration-label-add">Add</button>
+            </div>
+          </section>
         </div>
 
         <section id="view-log" class="view" hidden aria-label="Log">
@@ -317,6 +341,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app13"></script>
+    <script src="app.js?v=app14"></script>
   </body>
 </html>

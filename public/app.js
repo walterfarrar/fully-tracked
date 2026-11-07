@@ -39,11 +39,14 @@ let trendsToken = 0;
 let dataToken = 0;
 let map = null;
 let markerLayer = null;
+let hereMarker = null;
+let hereWatchId = null;
+let hereFixPending = false;
 let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
 let mapFocusToken = 0;
 let pendingMapPoint = null;
 const MAP_FOCUS_ZOOM = 16;
-const CELL_DEGREES = 0.005;
+const CELL_DEGREES = 0.00125;
 
 const intervalInput = document.getElementById('interval');
 const trackStatus = document.getElementById('track-status');
@@ -160,22 +163,29 @@ function bindWhenDisplays() {
 const FOODS_KEY = 'fully-tracked-foods';
 const DRINKS_KEY = 'fully-tracked-drinks';
 const EVENTS_KEY = 'fully-tracked-event-types';
-const STARTER_FOODS = ['Eggs', 'Oatmeal', 'Rice', 'Chicken', 'Salad', 'Fruit', 'Yogurt', 'Sandwich', 'Pasta', 'Soup'];
+const EMOTIONS_KEY = 'fully-tracked-emotions';
+const HYDRATION_AMOUNTS_KEY = 'fully-tracked-hydration-amounts';
+const LEGACY_FOODS = ['Eggs', 'Oatmeal', 'Rice', 'Chicken', 'Salad', 'Fruit', 'Yogurt', 'Sandwich', 'Pasta', 'Soup'];
 const STARTER_DRINKS = ['Water', 'Coffee', 'Soda'];
 const STARTER_EVENTS = ['Family trip', 'Birthday'];
-const OZ_CHOICES = [
-  { oz: 8, label: '8 oz · 1 cup' },
-  { oz: 12, label: '12 oz' },
-  { oz: 16, label: '16 oz · 2 cups' },
-  { oz: 20, label: '20 oz' },
-  { oz: 24, label: '24 oz · 3 cups' },
+const STARTER_HYDRATION_AMOUNTS = [
+  { label: 'water', ounces: 8 },
+  { label: 'coffee', ounces: 8 },
+  { label: 'tea', ounces: 8 },
+  { label: '1 cup', ounces: 8 },
+  { label: 'can', ounces: 12 },
 ];
 const URINE_COLORS = ['Clear', 'Pale', 'Yellow', 'Dark', 'Amber'];
 const URINE_AMOUNTS = ['A little', 'Usual', 'A lot'];
-const MOOD_TAGS = ['happy', 'sad', 'anxious', 'excited'];
+const MOOD_TAGS = [
+  'happy', 'sad', 'anxious', 'excited',
+  'calm', 'angry', 'tired', 'stressed',
+  'content', 'bored', 'hopeful', 'overwhelmed',
+  'grateful', 'lonely', 'frustrated', 'peaceful',
+];
 let pickedFoods = new Set();
 let pickedDrink = '';
-let pickedOz = 0;
+let pickedAmountLabel = '';
 let bathKind = 'stool';
 let pickedBristol = 0;
 let pickedUrineColor = '';
@@ -220,10 +230,75 @@ function fillChoices(container, items, pressed, onPick) {
   });
 }
 
+function readFoods() {
+  let names = [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FOODS_KEY) || 'null');
+    if (Array.isArray(parsed)) names = parsed.map((item) => String(item).trim()).filter(Boolean);
+  } catch {
+    names = [];
+  }
+  const legacy = LEGACY_FOODS.map((item) => item.toLowerCase()).sort().join('|');
+  const current = names.map((item) => item.toLowerCase()).sort().join('|');
+  if (names.length && current === legacy) {
+    names = [];
+    localStorage.setItem(FOODS_KEY, '[]');
+  }
+  return names;
+}
+
+function rememberFood(name) {
+  const clean = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return '';
+  const items = readFoods();
+  const existing = items.find((item) => item.toLowerCase() === clean.toLowerCase());
+  if (existing) return existing;
+  items.push(clean);
+  localStorage.setItem(FOODS_KEY, JSON.stringify(items));
+  return clean;
+}
+
+function readHydrationAmounts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HYDRATION_AMOUNTS_KEY) || 'null');
+    if (Array.isArray(parsed) && parsed.length) {
+      const amounts = parsed.map((item) => ({
+        label: String(item.label || '').trim().replace(/\s+/g, ' '),
+        ounces: Number(item.ounces),
+      })).filter((item) => item.label && Number.isFinite(item.ounces) && item.ounces > 0);
+      if (amounts.length) return amounts;
+    }
+  } catch {
+    /* Seed below. */
+  }
+  const seeded = STARTER_HYDRATION_AMOUNTS.map((item) => ({ ...item }));
+  localStorage.setItem(HYDRATION_AMOUNTS_KEY, JSON.stringify(seeded));
+  return seeded;
+}
+
+function writeHydrationAmounts(amounts) {
+  localStorage.setItem(HYDRATION_AMOUNTS_KEY, JSON.stringify(amounts));
+}
+
+function readCustomEmotions() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EMOTIONS_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => String(item).trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function emotionChoices() {
+  const custom = readCustomEmotions().filter((name) => !MOOD_TAGS.some((tag) => tag.toLowerCase() === name.toLowerCase()));
+  return MOOD_TAGS.concat(custom);
+}
+
 function renderMealFoods() {
   fillChoices(
     document.getElementById('meal-foods'),
-    readCatalog(FOODS_KEY, STARTER_FOODS),
+    readFoods(),
     (name) => pickedFoods.has(name),
     (name) => {
       if (pickedFoods.has(name)) pickedFoods.delete(name);
@@ -243,15 +318,83 @@ function renderDrinks() {
       renderDrinks();
     }
   );
+  renderAmountChoices();
+}
+
+function renderAmountChoices() {
+  const amounts = readHydrationAmounts();
+  if (pickedAmountLabel && !amounts.some((item) => item.label === pickedAmountLabel)) pickedAmountLabel = '';
   fillChoices(
     document.getElementById('oz-choices'),
-    OZ_CHOICES,
-    (choice) => choice.oz === pickedOz,
-    (choice) => {
-      pickedOz = choice.oz;
-      renderDrinks();
+    amounts.map((item) => item.label),
+    (label) => label === pickedAmountLabel,
+    (label) => {
+      pickedAmountLabel = label;
+      renderAmountChoices();
     }
   );
+}
+
+function renderHydrationSettings() {
+  const root = document.getElementById('hydration-amount-rows');
+  if (!root) return;
+  const amounts = readHydrationAmounts();
+  root.replaceChildren();
+  amounts.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'amount-row';
+    const name = document.createElement('span');
+    name.textContent = item.label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0.1';
+    input.step = '0.1';
+    input.inputMode = 'decimal';
+    input.setAttribute('aria-label', `${item.label} in ounces`);
+    input.value = String(item.ounces);
+    input.addEventListener('change', () => {
+      const ounces = Number(input.value);
+      const next = readHydrationAmounts();
+      if (!Number.isFinite(ounces) || ounces <= 0 || !next[index] || next[index].label !== item.label) {
+        input.value = String(item.ounces);
+        return;
+      }
+      next[index] = { label: item.label, ounces };
+      writeHydrationAmounts(next);
+    });
+    row.append(name, input);
+    root.append(row);
+  });
+}
+
+function addHydrationLabel() {
+  const labelInput = document.getElementById('hydration-label-new');
+  const ounceInput = document.getElementById('hydration-ounces-new');
+  const label = String(labelInput && labelInput.value || '').trim().replace(/\s+/g, ' ');
+  const ounces = Number(ounceInput && ounceInput.value);
+  if (!label || !Number.isFinite(ounces) || ounces <= 0) return;
+  const amounts = readHydrationAmounts();
+  const existing = amounts.find((item) => item.label.toLowerCase() === label.toLowerCase());
+  if (existing) existing.ounces = ounces;
+  else amounts.push({ label, ounces });
+  writeHydrationAmounts(amounts);
+  labelInput.value = '';
+  ounceInput.value = '';
+  renderHydrationSettings();
+  renderAmountChoices();
+}
+
+function openSettings() {
+  closeCheckIn();
+  const layer = document.getElementById('settings');
+  if (!layer) return;
+  renderHydrationSettings();
+  layer.hidden = false;
+}
+
+function closeSettings() {
+  const layer = document.getElementById('settings');
+  if (layer) layer.hidden = true;
 }
 
 function renderEvents() {
@@ -318,7 +461,7 @@ function syncMoodFace() {
 function renderMoodTags() {
   fillChoices(
     document.getElementById('mood-tags'),
-    MOOD_TAGS,
+    emotionChoices(),
     (name) => pickedEmotions.has(name),
     (name) => {
       if (pickedEmotions.has(name)) pickedEmotions.delete(name);
@@ -340,7 +483,7 @@ function renderCheckInChoices() {
 function resetCheckInState() {
   pickedFoods = new Set();
   pickedDrink = '';
-  pickedOz = 0;
+  pickedAmountLabel = '';
   bathKind = 'stool';
   pickedBristol = 0;
   pickedUrineColor = '';
@@ -502,7 +645,7 @@ async function readNutritionFile(file) {
 
 function addTypedFood() {
   const input = document.getElementById('meal-food-new');
-  const saved = rememberCatalogItem(FOODS_KEY, STARTER_FOODS, input && input.value);
+  const saved = rememberFood(input && input.value);
   if (!saved) return;
   pickedFoods.add(saved);
   input.value = '';
@@ -526,6 +669,27 @@ function addTypedEvent() {
   input.value = '';
   renderEvents();
   return saved;
+}
+
+function addTypedEmotion() {
+  const input = document.getElementById('mood-emotion-new');
+  const clean = String(input && input.value || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return;
+  const builtin = MOOD_TAGS.find((tag) => tag.toLowerCase() === clean.toLowerCase());
+  if (builtin) {
+    pickedEmotions.add(builtin);
+  } else {
+    const custom = readCustomEmotions();
+    const existing = custom.find((name) => name.toLowerCase() === clean.toLowerCase());
+    const saved = existing || clean;
+    if (!existing) {
+      custom.push(saved);
+      localStorage.setItem(EMOTIONS_KEY, JSON.stringify(custom));
+    }
+    pickedEmotions.add(saved);
+  }
+  input.value = '';
+  renderMoodTags();
 }
 
 const PREVIEW_ENTRIES_KEY = 'fully-tracked-preview-entries';
@@ -641,7 +805,12 @@ function entryLines(entry) {
   }
   if (entry.type === 'water') {
     const name = entry.drinkName || 'Water';
-    if (entry.amountOz != null) return [`${name} · ${formatNum(entry.amountOz)} oz`];
+    if (entry.amountOz != null) {
+      const bits = [name];
+      if (entry.amountLabel) bits.push(entry.amountLabel);
+      bits.push(`${formatNum(entry.amountOz)} oz`);
+      return [bits.join(' · ')];
+    }
     return [`${name} · ${formatNum(entry.amountMl)} ml`];
   }
   if (entry.type === 'bathroom') {
@@ -862,6 +1031,76 @@ function ensureMap() {
   return map;
 }
 
+function placeHereMarker(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  if (!ensureMap()) return;
+  const latlng = [latitude, longitude];
+  if (!hereMarker) {
+    const halo = L.circleMarker(latlng, {
+      radius: 8,
+      stroke: false,
+      weight: 0,
+      fillColor: '#d4b896',
+      fillOpacity: 0.95,
+    });
+    const core = L.circleMarker(latlng, {
+      radius: 3,
+      stroke: false,
+      weight: 0,
+      fillColor: '#6b5438',
+      fillOpacity: 1,
+    });
+    hereMarker = L.layerGroup([halo, core]).addTo(map);
+  } else {
+    hereMarker.eachLayer((layer) => layer.setLatLng(latlng));
+  }
+}
+
+function clearHereMarker() {
+  if (hereMarker && map) map.removeLayer(hereMarker);
+  hereMarker = null;
+}
+
+function stopHereWatch() {
+  if (hereWatchId != null && navigator.geolocation && navigator.geolocation.clearWatch) {
+    navigator.geolocation.clearWatch(hereWatchId);
+  }
+  hereWatchId = null;
+}
+
+function startHereWatch() {
+  if (!tracking || !mapTabOpen()) {
+    stopHereWatch();
+    if (!tracking) clearHereMarker();
+    return;
+  }
+  if (hereWatchId != null) return;
+  const geo = navigator.geolocation;
+    if (!geo || typeof geo.watchPosition !== 'function') {
+    if (!geo || hereFixPending || typeof geo.getCurrentPosition !== 'function') return;
+    hereFixPending = true;
+    readPosition().then((position) => {
+      if (!tracking || !mapTabOpen()) return;
+      placeHereMarker(position.coords.latitude, position.coords.longitude);
+    }).catch(() => {}).finally(() => {
+      hereFixPending = false;
+    });
+    return;
+  }
+  hereWatchId = geo.watchPosition((position) => {
+    if (!tracking || !mapTabOpen()) {
+      stopHereWatch();
+      if (!tracking) clearHereMarker();
+      return;
+    }
+    placeHereMarker(position.coords.latitude, position.coords.longitude);
+  }, () => {}, {
+    enableHighAccuracy: true,
+    maximumAge: 1000,
+    timeout: 20000,
+  });
+}
+
 function showDeviceOnMap(latitude, longitude) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   if (!ensureMap()) return;
@@ -983,8 +1222,8 @@ function renderMap(entries) {
     const fill = heatFill(cell.count);
     const label = cell.count === 1 ? '1 check-in in this cell' : `${cell.count} check-ins in this cell`;
     return L.rectangle([[cell.south, cell.west], [cell.north, cell.east]], {
-      color: '#243028',
-      weight: 1.5,
+      stroke: false,
+      weight: 0,
       fillColor: fill,
       fillOpacity: 0.82,
     }).bindPopup(label);
@@ -1228,6 +1467,7 @@ async function keepScreenAwake() {
 async function startTracking() {
   tracking = true;
   localStorage.setItem(TRACK_KEY, 'on');
+  startHereWatch();
   clearTimer();
   void keepScreenAwake();
   const wait = msUntilDue();
@@ -1298,12 +1538,14 @@ function bindForms() {
   });
   bindForm('water-form', (data) => {
     if (!pickedDrink) throw new Error('Choose a drink.');
-    if (!pickedOz) throw new Error('Choose an amount.');
+    const chosen = readHydrationAmounts().find((item) => item.label === pickedAmountLabel);
+    if (!chosen) throw new Error('Choose an amount.');
     return {
       type: 'water',
       occurredAt: fromDatetimeLocal(data.get('occurredAt')),
       drinkName: pickedDrink,
-      amountOz: pickedOz,
+      amountLabel: chosen.label,
+      amountOz: chosen.ounces,
     };
   });
   bindForm('bathroom-form', (data) => {
@@ -1376,6 +1618,21 @@ function bindForms() {
     addTypedEvent();
   });
   document.getElementById('mood-score').addEventListener('input', syncMoodFace);
+  document.getElementById('mood-emotion-add').addEventListener('click', addTypedEmotion);
+  document.getElementById('mood-emotion-new').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addTypedEmotion();
+  });
+  document.getElementById('open-settings').addEventListener('click', openSettings);
+  document.getElementById('open-amount-settings').addEventListener('click', openSettings);
+  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  document.getElementById('hydration-label-add').addEventListener('click', addHydrationLabel);
+  document.getElementById('hydration-label-new').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addHydrationLabel();
+  });
   document.getElementById('meal-take').addEventListener('click', () => {
     document.getElementById('meal-camera').click();
   });
@@ -1489,6 +1746,7 @@ function closeCheckIn() {
 
 function showView(name) {
   closeCheckIn();
+  closeSettings();
   document.querySelectorAll('.view').forEach((el) => {
     const on = el.id === `view-${name}`;
     el.hidden = !on;
@@ -1497,6 +1755,8 @@ function showView(name) {
   document.querySelectorAll('.tab').forEach((el) => {
     el.setAttribute('aria-current', el.dataset.view === name ? 'page' : 'false');
   });
+  if (name === 'map') startHereWatch();
+  else stopHereWatch();
   if (name === 'map') {
     ensureMap();
     const point = pendingMapPoint;
@@ -1571,6 +1831,11 @@ function bindShell() {
     if (event.key !== 'Escape') return;
     const active = document.activeElement;
     if (active && active.type === 'datetime-local') return;
+    const settings = document.getElementById('settings');
+    if (settings && !settings.hidden) {
+      closeSettings();
+      return;
+    }
     const layer = document.getElementById('checkin');
     if (layer && !layer.hidden) closeCheckIn();
   });
