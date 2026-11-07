@@ -52,6 +52,27 @@ function showBanner(message) {
   banner.textContent = message || '';
 }
 
+function offlinePreview(error) {
+  return Boolean(error && (error.status === 404 || error.status === 405));
+}
+
+function showOfflinePreview() {
+  allEntries = [];
+  renderList([], '');
+  renderMap([]);
+  renderCorrelations();
+  document.querySelectorAll('.chart-card').forEach((card) => {
+    const empty = card.querySelector('.chart-empty');
+    const wrap = card.querySelector('.chart-wrap');
+    if (empty) {
+      empty.hidden = false;
+      empty.textContent = 'No entries in this preview.';
+    }
+    if (wrap) wrap.hidden = true;
+  });
+  showMetric(activeMetric);
+}
+
 function formatNum(value) {
   if (value == null || Number.isNaN(value)) return '';
   const rounded = Math.round(value * 100) / 100;
@@ -499,7 +520,7 @@ async function recordPosition() {
   try {
     await refreshAll();
   } catch (error) {
-    showBanner(error.message);
+    if (!offlinePreview(error)) showBanner(error.message);
   }
   setStatus(`Tracking is on. A device check-in was just saved. ${nextCheckInSentence(intervalMs())}`);
   return 'saved';
@@ -590,7 +611,9 @@ function bindForm(id, build) {
       syncBristol();
       await refreshAll({ scroll: true });
     } catch (err) {
-      error.textContent = err.message || 'Could not save.';
+      error.textContent = offlinePreview(err)
+        ? 'This preview does not store entries.'
+        : (err.message || 'Could not save.');
     } finally {
       button.disabled = false;
     }
@@ -643,13 +666,17 @@ function bindForms() {
 function bindSearch() {
   document.getElementById('search-form').addEventListener('submit', (event) => {
     event.preventDefault();
-    loadList().catch((error) => showBanner(error.message));
+    loadList().catch((error) => {
+      if (!offlinePreview(error)) showBanner(error.message);
+    });
   });
   let searchTimer = null;
   searchInput.addEventListener('input', () => {
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => {
-      loadList().catch((error) => showBanner(error.message));
+      loadList().catch((error) => {
+        if (!offlinePreview(error)) showBanner(error.message);
+      });
     }, 200);
   });
 }
@@ -664,7 +691,9 @@ function bindRange() {
     document.querySelectorAll('#range button').forEach((el) => {
       el.setAttribute('aria-pressed', el === button ? 'true' : 'false');
     });
-    loadTrends().catch((error) => showBanner(error.message));
+    loadTrends().catch((error) => {
+      if (!offlinePreview(error)) showBanner(error.message);
+    });
   });
 }
 
@@ -702,8 +731,10 @@ async function readStepReading() {
       return;
     }
     note.textContent = reading.reason;
-  } catch {
-    note.textContent = 'Steps could not be checked. No step count was invented, and Apple Health was not read.';
+  } catch (error) {
+    if (!offlinePreview(error)) {
+      note.textContent = 'Steps could not be checked. No step count was invented, and Apple Health was not read.';
+    }
   }
 }
 
@@ -800,7 +831,8 @@ async function boot() {
   try {
     await refreshAll();
   } catch (error) {
-    showBanner(error.message);
+    if (offlinePreview(error)) showOfflinePreview();
+    else showBanner(error.message);
   }
   startTracking();
   readStepReading().finally(scheduleStepReads);
