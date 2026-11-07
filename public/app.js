@@ -1,6 +1,6 @@
 'use strict';
 
-const MIN_MINUTES = 5;
+const MIN_MINUTES = 1;
 const MAX_MINUTES = 7 * 24 * 60;
 const DEFAULT_MINUTES = 10;
 const TRACK_KEY = 'fully-tracked-location';
