@@ -1701,7 +1701,6 @@ async function trackLocationOnce() {
     } catch (error) {
       if (!offlinePreview(error)) showBanner(error.message);
     }
-    if (ensureMap()) map.setView([latitude, longitude], map.getZoom(), { animate: false });
   } catch (error) {
     const fromDevice = error && (error.code === 1 || error.code === 2 || error.code === 3);
     showBanner(fromDevice ? 'Location was not recorded.' : (error.message || 'Location was not recorded.'));
