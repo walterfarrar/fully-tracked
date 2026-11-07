@@ -32,6 +32,7 @@ let stepsTimer = null;
 let rangeDays = 7;
 let activeMetric = 'water';
 let allEntries = [];
+let logType = 'all';
 let tracking = false;
 let recording = false;
 let timer = null;
@@ -1184,9 +1185,12 @@ function renderList(entries, query) {
   if (!entries.length) {
     count.textContent = '';
     empty.hidden = false;
+    const typeLabel = TYPE_LABELS[logType] || logType;
     empty.textContent = trimmed
       ? `No entries match “${trimmed}”.`
-      : 'Nothing here yet. Location check-ins appear when tracking is on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand.';
+      : logType === 'all'
+        ? 'Nothing here yet. Location check-ins appear when tracking is on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand.'
+        : `No ${typeLabel} entries yet.`;
     return;
   }
   empty.hidden = true;
@@ -1622,12 +1626,29 @@ function renderMap(entries) {
   window.setTimeout(() => map.invalidateSize(), 0);
 }
 
+function entrySearchText(entry) {
+  let lines = '';
+  try {
+    lines = entryLines(entry).join('\n');
+  } catch {
+    lines = '';
+  }
+  return `${TYPE_LABELS[entry.type] || ''}\n${lines}\n${JSON.stringify(entry)}`.toLowerCase();
+}
+
+function visibleLogEntries() {
+  const query = searchInput.value.trim().toLowerCase();
+  const typed = logType === 'all' ? allEntries : allEntries.filter((entry) => entry.type === logType);
+  if (!query) return typed;
+  return typed.filter((entry) => entrySearchText(entry).includes(query));
+}
+
+function paintLog() {
+  renderList(visibleLogEntries(), searchInput.value);
+}
+
 async function loadList() {
-  const token = ++listToken;
-  const query = searchInput.value;
-  const data = await getJson(`/api/entries?q=${encodeURIComponent(query)}`);
-  if (token !== listToken) return;
-  renderList(data.entries, query);
+  paintLog();
 }
 
 async function loadTrends() {
@@ -1644,18 +1665,16 @@ async function refreshAll(options = {}) {
   const token = ++dataToken;
   const listTok = ++listToken;
   const trendTok = ++trendsToken;
-  const query = searchInput.value;
   const days = rangeDays;
-  const [all, listed, trends] = await Promise.all([
+  const [all, trends] = await Promise.all([
     getJson('/api/entries'),
-    getJson(`/api/entries?q=${encodeURIComponent(query)}`),
     getJson(`/api/trends?days=${days}&tzOffsetMinutes=${new Date().getTimezoneOffset()}`),
   ]);
   if (token !== dataToken) return;
   allEntries = all.entries;
   renderMap(allEntries);
   renderCorrelations();
-  if (listTok === listToken) renderList(listed.entries, query);
+  if (listTok === listToken) paintLog();
   if (trendTok === trendsToken) renderTrends(trends);
   if (options.scroll) {
     document.getElementById('journal-heading').scrollIntoView({ block: 'nearest' });
@@ -2130,6 +2149,20 @@ function bindForms() {
   renderCheckInChoices();
 }
 
+function bindLogFilters() {
+  const group = document.getElementById('log-types');
+  if (!group) return;
+  group.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-log-type]');
+    if (!button) return;
+    logType = button.dataset.logType;
+    group.querySelectorAll('button[data-log-type]').forEach((el) => {
+      el.setAttribute('aria-pressed', el === button ? 'true' : 'false');
+    });
+    paintLog();
+  });
+}
+
 function bindSearch() {
   document.getElementById('search-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -2367,6 +2400,7 @@ async function boot() {
   bindShell();
   bindForms();
   bindSearch();
+  bindLogFilters();
   bindRange();
   bindTracking();
   bindAnalyze();

@@ -330,6 +330,18 @@
 
         <section id="view-log" class="view" hidden aria-label="Log">
           <h2>Log</h2>
+          <div id="log-types" class="choice-list" role="group" aria-label="Entry type">
+            <button type="button" data-log-type="all" aria-pressed="true">All</button>
+            <button type="button" data-log-type="location" aria-pressed="false">Location</button>
+            <button type="button" data-log-type="meal" aria-pressed="false">Meal</button>
+            <button type="button" data-log-type="water" aria-pressed="false">Hydration</button>
+            <button type="button" data-log-type="bathroom" aria-pressed="false">Bathroom</button>
+            <button type="button" data-log-type="mood" aria-pressed="false">Mood</button>
+            <button type="button" data-log-type="life_event" aria-pressed="false">Life event</button>
+            <button type="button" data-log-type="dose" aria-pressed="false">Dose</button>
+            <button type="button" data-log-type="sleep" aria-pressed="false">Sleep</button>
+            <button type="button" data-log-type="steps" aria-pressed="false">Steps</button>
+          </div>
           <section class="journal" aria-labelledby="journal-heading">
             <div class="section-head">
               <h3 id="journal-heading">Recent</h3>
@@ -463,6 +475,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app23"></script>
+    <script src="app.js?v=app24"></script>
   </body>
 </html>
