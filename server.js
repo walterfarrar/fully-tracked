@@ -180,6 +180,7 @@ function searchBlob(entry) {
   }
   if (entry.latitude != null) {
     parts.push(String(entry.latitude), String(entry.longitude), String(entry.accuracyMeters));
+    if (entry.altitude != null) parts.push(String(entry.altitude));
   }
   if (entry.stepCount != null) parts.push(String(entry.stepCount), `${entry.stepCount} steps`);
   return parts
@@ -199,6 +200,7 @@ function toApi(row) {
     entry.latitude = row.latitude;
     entry.longitude = row.longitude;
     entry.accuracyMeters = row.accuracy_meters;
+    entry.altitude = row.altitude == null ? null : row.altitude;
     entry.source = row.source;
   } else if (row.type === 'meal') {
     entry.description = row.description;
@@ -222,6 +224,13 @@ function toApi(row) {
     entry.source = row.source;
   }
   return entry;
+}
+
+function optionalAltitude(value) {
+  if (value == null || value === '') return null;
+  const altitude = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(altitude)) throw new HttpError(400, 'altitude must be a number.');
+  return altitude;
 }
 
 function requiredString(value, field, max) {
@@ -271,6 +280,7 @@ function validateEntry(body) {
     latitude: null,
     longitude: null,
     accuracyMeters: null,
+    altitude: null,
     source: null,
     description: null,
     amountMl: null,
@@ -298,6 +308,7 @@ function validateEntry(body) {
       latitude,
       longitude,
       accuracyMeters,
+      altitude: optionalAltitude(body.altitude),
       source: 'device',
     };
   }
@@ -520,6 +531,7 @@ function openDatabase() {
       latitude REAL,
       longitude REAL,
       accuracy_meters REAL,
+      altitude REAL,
       source TEXT,
       description TEXT,
       amount_ml REAL,
@@ -536,6 +548,9 @@ function openDatabase() {
   if (!columns.some((column) => column.name === 'step_count')) {
     db.exec('ALTER TABLE entries ADD COLUMN step_count INTEGER');
   }
+  if (!columns.some((column) => column.name === 'altitude')) {
+    db.exec('ALTER TABLE entries ADD COLUMN altitude REAL');
+  }
   db.exec('CREATE INDEX IF NOT EXISTS entries_occurred ON entries (occurred_at DESC, saved_at DESC)');
   return db;
 }
@@ -544,10 +559,10 @@ function createApp(db) {
   const insert = db.prepare(`
     INSERT INTO entries (
       id, type, occurred_at, saved_at,
-      latitude, longitude, accuracy_meters, source,
+      latitude, longitude, accuracy_meters, altitude, source,
       description, amount_ml, kind, bristol_scale, note, title,
       mood_score, sleep_hours, step_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateSteps = db.prepare(`
     UPDATE entries
@@ -617,6 +632,7 @@ function createApp(db) {
       value.latitude,
       value.longitude,
       value.accuracyMeters,
+      value.altitude,
       value.source,
       value.description,
       value.amountMl,

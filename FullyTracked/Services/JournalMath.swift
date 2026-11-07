@@ -120,6 +120,9 @@ enum JournalMath {
             let lat = entry.latitude.map { String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), $0) } ?? ""
             let lon = entry.longitude.map { String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), $0) } ?? ""
             var line = "\(lat), \(lon)"
+            if let altitude = entry.altitude {
+                line += " · \(formatNumber(altitude)) m elevation"
+            }
             if let celsius = entry.temperatureCelsius {
                 line += " · \(formatFahrenheit(celsius))"
                 if let condition = entry.condition, !condition.isEmpty {
@@ -531,6 +534,9 @@ enum JournalMath {
         if let latitude = entry.latitude, let longitude = entry.longitude {
             parts.append(String(latitude))
             parts.append(String(longitude))
+        }
+        if let altitude = entry.altitude {
+            parts.append(String(altitude))
         }
         if let accuracy = entry.accuracyMeters {
             parts.append(String(accuracy))

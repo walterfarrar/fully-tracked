@@ -7,6 +7,7 @@ struct LocationFix: Sendable {
     var latitude: Double
     var longitude: Double
     var accuracy: Double
+    var altitude: Double?
     var timestamp: Date
 }
 
@@ -71,6 +72,7 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
                 latitude: location.coordinate.latitude,
                 longitude: location.coordinate.longitude,
                 accuracy: location.horizontalAccuracy,
+                altitude: location.verticalAccuracy < 0 ? nil : location.altitude,
                 timestamp: location.timestamp
             )
         }
@@ -124,6 +126,7 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
         entry.latitude = fix.latitude
         entry.longitude = fix.longitude
         entry.accuracyMeters = fix.accuracy
+        entry.altitude = fix.altitude
         entry.source = "device"
         context.insert(entry)
         do {

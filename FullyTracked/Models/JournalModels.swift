@@ -37,6 +37,7 @@ final class JournalEntry {
     var latitude: Double?
     var longitude: Double?
     var accuracyMeters: Double?
+    var altitude: Double?
     var source: String?
 
     var weatherObservedAt: Date?

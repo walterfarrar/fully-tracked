@@ -44,6 +44,7 @@ let hereMarker = null;
 let hereWatchId = null;
 let hereFixPending = false;
 let followMe = true;
+let watchedCellKey = null;
 let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
 let mapFocusToken = 0;
 let pendingMapPoint = null;
@@ -1104,9 +1105,13 @@ async function getJson(url, options) {
 
 function entryLines(entry) {
   if (entry.type === 'location') {
-    return [
-      `${entry.latitude.toFixed(5)}, ${entry.longitude.toFixed(5)} · ±${Math.round(entry.accuracyMeters)} m · device`,
+    const bits = [
+      `${entry.latitude.toFixed(5)}, ${entry.longitude.toFixed(5)}`,
+      `±${Math.round(entry.accuracyMeters)} m`,
     ];
+    if (Number.isFinite(entry.altitude)) bits.push(`${Math.round(entry.altitude)} m elevation`);
+    bits.push('device');
+    return [bits.join(' · ')];
   }
   if (entry.type === 'meal') {
     const named = Array.isArray(entry.foods) ? entry.foods : [];
@@ -1393,6 +1398,60 @@ function stopHereWatch() {
     navigator.geolocation.clearWatch(hereWatchId);
   }
   hereWatchId = null;
+  watchedCellKey = null;
+}
+
+function heatCellKey(latitude, longitude) {
+  const south = Math.floor(latitude / CELL_DEGREES) * CELL_DEGREES;
+  const west = Math.floor(longitude / CELL_DEGREES) * CELL_DEGREES;
+  return `${south.toFixed(5)},${west.toFixed(5)}`;
+}
+
+function watchCellChanged(latitude, longitude) {
+  const key = heatCellKey(latitude, longitude);
+  const previous = watchedCellKey;
+  watchedCellKey = key;
+  return previous != null && previous !== key;
+}
+
+function readAltitude(coords) {
+  const altitude = coords && coords.altitude;
+  return Number.isFinite(altitude) ? altitude : null;
+}
+
+function locationBody(position, manual) {
+  const { latitude, longitude, accuracy } = position.coords;
+  const body = {
+    type: 'location',
+    occurredAt: new Date(position.timestamp || Date.now()).toISOString(),
+    latitude,
+    longitude,
+    accuracyMeters: accuracy,
+    altitude: readAltitude(position.coords),
+    source: 'device',
+  };
+  if (manual) body.manual = true;
+  return body;
+}
+
+async function saveCellCrossing(position) {
+  const { latitude, longitude, accuracy } = position.coords;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0) return;
+  try {
+    await getJson('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(locationBody(position, true)),
+    });
+    try {
+      await refreshAll();
+    } catch (error) {
+      if (!offlinePreview(error)) showBanner(error.message);
+    }
+  } catch (error) {
+    if (error && error.status === 429) return;
+    if (!offlinePreview(error)) showBanner(error.message);
+  }
 }
 
 function startHereWatch() {
@@ -1414,13 +1473,17 @@ function startHereWatch() {
     });
     return;
   }
+  watchedCellKey = null;
   hereWatchId = geo.watchPosition((position) => {
     if (!tracking || !mapTabOpen()) {
       stopHereWatch();
       if (!tracking) clearHereMarker();
       return;
     }
-    placeHereMarker(position.coords.latitude, position.coords.longitude);
+    const { latitude, longitude } = position.coords;
+    placeHereMarker(latitude, longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    if (watchCellChanged(latitude, longitude)) void saveCellCrossing(position);
   }, () => {}, {
     enableHighAccuracy: true,
     maximumAge: 1000,
@@ -1685,15 +1748,7 @@ async function trackLocationOnce() {
     await getJson('/api/entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'location',
-        occurredAt: new Date(position.timestamp || Date.now()).toISOString(),
-        latitude,
-        longitude,
-        accuracyMeters: accuracy,
-        source: 'device',
-        manual: true,
-      }),
+      body: JSON.stringify(locationBody(position, true)),
     });
     showBanner('');
     try {
@@ -1723,15 +1778,7 @@ async function pingLocation() {
     await getJson('/api/entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'location',
-        occurredAt: new Date(position.timestamp || Date.now()).toISOString(),
-        latitude,
-        longitude,
-        accuracyMeters: accuracy,
-        source: 'device',
-        manual: true,
-      }),
+      body: JSON.stringify(locationBody(position, true)),
     });
     showBanner('');
     if (note) {
@@ -1765,14 +1812,7 @@ async function recordPosition() {
     await getJson('/api/entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'location',
-        occurredAt: new Date(position.timestamp || Date.now()).toISOString(),
-        latitude,
-        longitude,
-        accuracyMeters: accuracy,
-        source: 'device',
-      }),
+      body: JSON.stringify(locationBody(position, false)),
     });
   } catch (error) {
     if (error.status === 429) {
