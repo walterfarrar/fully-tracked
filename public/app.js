@@ -1021,6 +1021,46 @@ function writePreviewEntries(entries) {
   localStorage.setItem(PREVIEW_ENTRIES_KEY, JSON.stringify(entries));
 }
 
+function journalFilePayload(entries) {
+  return {
+    format: 'fully-tracked-journal',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    entries,
+  };
+}
+
+function downloadJournal(payload) {
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const day = String(payload.exportedAt || '').slice(0, 10) || 'journal';
+  link.href = url;
+  link.download = `fully-tracked-journal-${day}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportJournal() {
+  const note = document.getElementById('export-journal-note');
+  if (note) note.textContent = '';
+  try {
+    const response = await fetch('/api/journal/export', { cache: 'no-store' });
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      if (data && data.format === 'fully-tracked-journal' && data.version === 1 && Array.isArray(data.entries)) {
+        downloadJournal(data);
+        return;
+      }
+    }
+  } catch {
+    // GitHub Pages has no journal server. The file comes from this browser.
+  }
+  downloadJournal(journalFilePayload(readPreviewEntries()));
+}
+
 function previewUrl(url) {
   return new URL(url, 'https://preview.local');
 }
@@ -2400,6 +2440,9 @@ async function boot() {
   bindShell();
   bindForms();
   bindSearch();
+  document.getElementById('export-journal').addEventListener('click', () => {
+    void exportJournal();
+  });
   bindLogFilters();
   bindRange();
   bindTracking();

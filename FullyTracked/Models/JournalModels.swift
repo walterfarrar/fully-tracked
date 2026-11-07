@@ -10,6 +10,7 @@ enum EntryType: String, Codable, CaseIterable, Identifiable {
     case mood
     case sleep
     case steps
+    case dose
 
     var id: String { rawValue }
 
@@ -23,6 +24,7 @@ enum EntryType: String, Codable, CaseIterable, Identifiable {
         case .mood: "Mood"
         case .sleep: "Sleep"
         case .steps: "Steps"
+        case .dose: "Dose"
         }
     }
 }
@@ -57,6 +59,22 @@ final class JournalEntry {
     var moodScore: Int?
     var sleepHours: Double?
     var stepCount: Int?
+
+    var amountLabel: String? = nil
+    var amountOz: Double? = nil
+    var amountHad: String? = nil
+    var foodsJSON: String? = nil
+    var stool: Bool? = nil
+    var urine: Bool? = nil
+    var stoolColor: String? = nil
+    var stoolAmount: String? = nil
+    var urineColor: String? = nil
+    var urineClarity: String? = nil
+    var urineAmount: String? = nil
+    var emotions: [String]? = nil
+    var substanceName: String? = nil
+    var doseAmount: Double? = nil
+    var doseUnit: String? = nil
 
     var servingSize: String?
     var calories: Double?

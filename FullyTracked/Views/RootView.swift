@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum Screen: String, CaseIterable, Identifiable {
     case home
@@ -51,9 +52,30 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @State private var screen: Screen = .home
     @State private var logKind: LogKind = .meal
+    @State private var importingJournal = false
+    @State private var importNote = ""
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button("Import journal") {
+                    importingJournal = true
+                }
+                .buttonStyle(.plain)
+                .font(Theme.font(15))
+                .foregroundStyle(Theme.ink)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            if !importNote.isEmpty {
+                Text(importNote)
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+            }
             Group {
                 switch screen {
                 case .home:
@@ -74,10 +96,42 @@ struct RootView: View {
             ScreenNav(screen: $screen)
         }
         .background(Theme.background)
+        .fileImporter(isPresented: $importingJournal, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                importJournal(from: url)
+            case .failure:
+                importNote = "The journal file could not be opened."
+            }
+        }
         .task {
             JournalSeed.seed(context)
             LocationTracker.shared.start()
             HealthSteps.shared.start()
+        }
+    }
+
+    private func importJournal(from url: URL) {
+        let started = url.startAccessingSecurityScopedResource()
+        defer {
+            if started {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let outcome = try JournalImporter.importJournal(data, context: context)
+            var parts = ["Imported \(outcome.inserted)."]
+            if outcome.skipped > 0 {
+                parts.append("Skipped \(outcome.skipped) already saved.")
+            }
+            if outcome.rejected > 0 {
+                parts.append("\(outcome.rejected) could not be read.")
+            }
+            importNote = parts.joined(separator: " ")
+        } catch {
+            importNote = error.localizedDescription
         }
     }
 }

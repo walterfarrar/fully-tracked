@@ -131,11 +131,23 @@ enum JournalMath {
             }
             return line
         case .meal:
-            return entry.descriptionText ?? ""
+            var meal = entry.descriptionText ?? ""
+            if meal.isEmpty, let foodsJSON = entry.foodsJSON, !foodsJSON.isEmpty {
+                meal = foodsJSON
+            }
+            if let amountHad = entry.amountHad, !amountHad.isEmpty {
+                meal += meal.isEmpty ? amountHad : " · \(amountHad)"
+            }
+            return meal
         case .hydration:
             var parts = [entry.drinkName ?? "Drink"]
+            if let label = entry.amountLabel, !label.isEmpty {
+                parts.append(label)
+            }
             if let amount = entry.amountMl {
                 parts.append("\(formatNumber(amount)) ml")
+            } else if let ounces = entry.amountOz {
+                parts.append("\(formatNumber(ounces)) oz")
             }
             if let strength = entry.strength, !strength.isEmpty {
                 parts.append(strength)
@@ -146,6 +158,21 @@ enum JournalMath {
             if let scale = entry.bristolScale {
                 line += " · Bristol \(scale)"
             }
+            if let color = entry.stoolColor, !color.isEmpty {
+                line += line.isEmpty ? color : " · \(color)"
+            }
+            if let amount = entry.stoolAmount, !amount.isEmpty {
+                line += line.isEmpty ? amount : " · \(amount)"
+            }
+            if let color = entry.urineColor, !color.isEmpty {
+                line += line.isEmpty ? color : " · \(color)"
+            }
+            if let clarity = entry.urineClarity, !clarity.isEmpty {
+                line += line.isEmpty ? clarity : " · \(clarity)"
+            }
+            if let amount = entry.urineAmount, !amount.isEmpty {
+                line += line.isEmpty ? amount : " · \(amount)"
+            }
             if let note = entry.note, !note.isEmpty {
                 line += line.isEmpty ? note : " · \(note)"
             }
@@ -154,6 +181,10 @@ enum JournalMath {
             return entry.title ?? ""
         case .mood:
             var line = entry.moodScore.map(String.init) ?? ""
+            if let emotions = entry.emotions, !emotions.isEmpty {
+                let names = emotions.joined(separator: ", ")
+                line += line.isEmpty ? names : " · \(names)"
+            }
             if let note = entry.note, !note.isEmpty {
                 line += line.isEmpty ? note : " · \(note)"
             }
@@ -168,6 +199,19 @@ enum JournalMath {
                 return "\(count) steps"
             }
             return ""
+        case .dose:
+            var parts: [String] = []
+            if let name = entry.substanceName, !name.isEmpty {
+                parts.append(name)
+            }
+            if let amount = entry.doseAmount {
+                var dose = formatNumber(amount)
+                if let unit = entry.doseUnit, !unit.isEmpty {
+                    dose += " \(unit)"
+                }
+                parts.append(dose)
+            }
+            return parts.joined(separator: " · ")
         }
     }
 
@@ -511,13 +555,31 @@ enum JournalMath {
             entry.kind ?? "",
             entry.source ?? "",
             entry.drinkName ?? "",
+            entry.amountLabel ?? "",
+            entry.amountHad ?? "",
             entry.strength ?? "",
+            entry.stoolColor ?? "",
+            entry.stoolAmount ?? "",
+            entry.urineColor ?? "",
+            entry.urineClarity ?? "",
+            entry.urineAmount ?? "",
+            entry.substanceName ?? "",
+            entry.doseUnit ?? "",
+            entry.foodsJSON ?? "",
+            (entry.emotions ?? []).joined(separator: ", "),
             entry.condition ?? "",
             entry.servingSize ?? "",
         ]
         if let amount = entry.amountMl {
             parts.append("\(formatNumber(amount))")
             parts.append("\(formatNumber(amount)) ml")
+        }
+        if let ounces = entry.amountOz {
+            parts.append(formatNumber(ounces))
+            parts.append("\(formatNumber(ounces)) oz")
+        }
+        if let dose = entry.doseAmount {
+            parts.append(formatNumber(dose))
         }
         if let score = entry.moodScore {
             parts.append("\(score)")

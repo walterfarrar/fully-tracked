@@ -825,6 +825,25 @@ function createApp(db) {
     sendJson(res, 200, { analysis, model: choice.id });
   }
 
+  function handleJournalExport(req, res) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed.');
+    const payload = {
+      format: 'fully-tracked-journal',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      entries: selectAll.all().map(toApi),
+    };
+    if (req.method === 'HEAD') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end();
+      return;
+    }
+    sendJson(res, 200, payload);
+  }
+
   function handleStepsReading(req, res) {
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed.');
     const reading = readDailyStepTotals();
@@ -842,6 +861,7 @@ function createApp(db) {
     if (url.pathname === '/api/trends') return handleTrends(req, res, url);
     if (url.pathname === '/api/steps/reading') return handleStepsReading(req, res);
     if (url.pathname === '/api/analyze') return handleAnalyze(req, res);
+    if (url.pathname === '/api/journal/export') return handleJournalExport(req, res);
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       throw new HttpError(405, 'Method not allowed.');
     }
