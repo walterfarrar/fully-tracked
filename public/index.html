@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app11" />
+    <link rel="stylesheet" href="styles.css?v=app12" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -405,6 +405,10 @@
             <p id="map-count" class="eyebrow"></p>
           </div>
           <p id="map-empty" class="empty">Allow location to center this map. Visited cells darken with each check-in.</p>
+          <div class="map-controls">
+            <button type="button" id="follow-toggle" aria-pressed="true">Follow me</button>
+            <button type="button" id="track-location" aria-pressed="false">Track location</button>
+          </div>
           <div id="map" class="map"></div>
         </section>
 
@@ -425,6 +429,6 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app16"></script>
+    <script src="app.js?v=app17"></script>
   </body>
 </html>

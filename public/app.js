@@ -43,6 +43,7 @@ let markerLayer = null;
 let hereMarker = null;
 let hereWatchId = null;
 let hereFixPending = false;
+let followMe = true;
 let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
 let mapFocusToken = 0;
 let pendingMapPoint = null;
@@ -1357,29 +1358,29 @@ function ensureMap() {
   return map;
 }
 
+function hereIcon() {
+  return L.divIcon({
+    className: 'here-icon',
+    html: '<span class="here-dot"></span>',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
+
 function placeHereMarker(latitude, longitude) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   if (!ensureMap()) return;
   const latlng = [latitude, longitude];
   if (!hereMarker) {
-    const halo = L.circleMarker(latlng, {
-      radius: 8,
-      stroke: false,
-      weight: 0,
-      fillColor: '#d4b896',
-      fillOpacity: 0.95,
-    });
-    const core = L.circleMarker(latlng, {
-      radius: 3,
-      stroke: false,
-      weight: 0,
-      fillColor: '#6b5438',
-      fillOpacity: 1,
-    });
-    hereMarker = L.layerGroup([halo, core]).addTo(map);
+    hereMarker = L.marker(latlng, {
+      icon: hereIcon(),
+      interactive: false,
+      keyboard: false,
+    }).addTo(map);
   } else {
-    hereMarker.eachLayer((layer) => layer.setLatLng(latlng));
+    hereMarker.setLatLng(latlng);
   }
+  if (followMe) map.setView(latlng, map.getZoom(), { animate: false });
 }
 
 function clearHereMarker() {
@@ -1795,6 +1796,29 @@ function syncTrackToggle() {
     const on = button.dataset.track === 'on';
     button.setAttribute('aria-pressed', (on ? tracking : !tracking) ? 'true' : 'false');
   });
+  syncMapTracking();
+}
+
+function syncMapTracking() {
+  const button = document.getElementById('track-location');
+  if (!button) return;
+  button.setAttribute('aria-pressed', tracking ? 'true' : 'false');
+  button.textContent = tracking ? 'Tracking on' : 'Track location';
+}
+
+function syncFollowToggle() {
+  const button = document.getElementById('follow-toggle');
+  if (!button) return;
+  button.setAttribute('aria-pressed', followMe ? 'true' : 'false');
+}
+
+function restoreFollow() {
+  try {
+    followMe = sessionStorage.getItem('fully-tracked-follow') !== 'off';
+  } catch {
+    followMe = true;
+  }
+  syncFollowToggle();
 }
 
 function stopTracking() {
@@ -2072,6 +2096,27 @@ function bindRange() {
 }
 
 function bindTracking() {
+  document.getElementById('follow-toggle').addEventListener('click', () => {
+    followMe = !followMe;
+    try {
+      sessionStorage.setItem('fully-tracked-follow', followMe ? 'on' : 'off');
+    } catch {
+      // The toggle still applies for this page view when storage is blocked.
+    }
+    syncFollowToggle();
+    if (followMe && hereMarker && map) {
+      const point = hereMarker.getLatLng();
+      map.setView(point, map.getZoom(), { animate: false });
+    }
+  });
+  document.getElementById('track-location').addEventListener('click', () => {
+    if (tracking) {
+      syncMapTracking();
+      if (mapTabOpen()) startHereWatch();
+      return;
+    }
+    void startTracking();
+  });
   document.getElementById('track-toggle').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-track]');
     if (!button) return;
@@ -2254,6 +2299,7 @@ async function boot() {
   setDefaultTimes();
   syncBristol();
   restoreInterval();
+  restoreFollow();
   bindShell();
   bindForms();
   bindSearch();
