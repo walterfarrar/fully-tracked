@@ -18,11 +18,11 @@ const TYPE_LABELS = {
 };
 
 const CHARTS = {
-  water: { color: '#2a6f8f', kind: 'bar', label: 'ml' },
-  meals: { color: '#c46b3a', kind: 'bar', label: 'meals' },
-  mood: { color: '#3d6b4f', kind: 'line', label: 'score' },
-  sleep: { color: '#3d4d7a', kind: 'line', label: 'hours' },
-  steps: { color: '#1c1c1c', kind: 'bar', label: 'steps' },
+  water: { color: '#8aa4b5', kind: 'bar', label: 'ml' },
+  meals: { color: '#c4896a', kind: 'bar', label: 'meals' },
+  mood: { color: '#9caf96', kind: 'line', label: 'score' },
+  sleep: { color: '#d4b896', kind: 'line', label: 'hours' },
+  steps: { color: '#c4a484', kind: 'bar', label: 'steps' },
 };
 
 const chartInstances = { water: null, meals: null, mood: null, sleep: null, steps: null };
@@ -203,7 +203,7 @@ function emptyChartMessage(key, days) {
   if (key === 'water') return `No water logged in ${span}.`;
   if (key === 'meals') return `No meals logged in ${span}.`;
   if (key === 'mood') return `No mood scores in ${span}.`;
-  if (key === 'steps') return `No step totals in ${span}. This browser cannot read Apple Health, so no count is filled in.`;
+  if (key === 'steps') return `No step totals in ${span}. Apple Health is not available in this preview, so no count is filled in.`;
   return `No sleep logged in ${span}.`;
 }
 
@@ -259,14 +259,17 @@ function renderTrends(payload) {
         plugins: { legend: { display: false } },
         scales: {
           x: {
-            ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: payload.days === 7 ? 7 : 8 },
+            ticks: { color: '#a89f94', maxRotation: 0, autoSkip: true, maxTicksLimit: payload.days === 7 ? 7 : 8 },
             grid: { display: false },
+            border: { color: 'rgba(212, 184, 150, 0.35)' },
           },
           y: key === 'mood'
-            ? { min: 1, max: 5, ticks: { stepSize: 1 } }
+            ? { min: 1, max: 5, ticks: { stepSize: 1, color: '#a89f94' }, grid: { color: 'rgba(168, 159, 148, 0.2)' }, border: { color: 'rgba(212, 184, 150, 0.35)' } }
             : {
                 beginAtZero: true,
-                ticks: key === 'meals' ? { precision: 0 } : {},
+                ticks: key === 'meals' ? { precision: 0, color: '#a89f94' } : { color: '#a89f94' },
+                grid: { color: 'rgba(168, 159, 148, 0.2)' },
+                border: { color: 'rgba(212, 184, 150, 0.35)' },
               },
         },
       },
@@ -314,9 +317,9 @@ function renderMap(entries) {
   }
   if (!map) {
     map = L.map(frame, { scrollWheelZoom: false });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
     const icon = L.icon({
@@ -450,7 +453,7 @@ function scheduleIn(ms) {
 
 function readPosition() {
   if (!navigator.geolocation) {
-    return Promise.reject(Object.assign(new Error('This browser has no location services.'), { code: 0 }));
+    return Promise.reject(Object.assign(new Error('Location services are not available.'), { code: 0 }));
   }
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -528,7 +531,7 @@ async function keepScreenAwake() {
       wakeLock = null;
     });
   } catch {
-    // A refused wake lock does not pause check-ins. The interval keeps running.
+    // A refused screen-awake request does not pause check-ins. The interval keeps running.
   }
 }
 
@@ -543,7 +546,7 @@ async function startTracking() {
     setStatus(`Tracking is on. ${nextCheckInSentence(wait)}`);
     return;
   }
-  setStatus('Tracking is on. Asking this browser for the device location. If you allow it once, later check-ins need no extra taps.');
+  setStatus('Tracking is on. Asking for the device location. If you allow it once, later check-ins need no extra taps.');
   await tick();
 }
 
@@ -692,7 +695,7 @@ async function readStepReading() {
   try {
     const reading = await getJson('/api/steps/reading');
     if (reading.saved || reading.executed || reading.available) {
-      note.textContent = 'Step reading was refused. This page does not treat a browser check as Apple Health.';
+      note.textContent = 'Step reading was refused. This preview does not treat that check as Apple Health.';
       return;
     }
     note.textContent = reading.reason;

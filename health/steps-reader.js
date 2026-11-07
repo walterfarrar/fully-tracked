@@ -19,7 +19,7 @@ const CONTRACT = {
   writeAccess: false,
 };
 
-const REASON = 'This browser cannot read Apple Health. HealthKit runs only in an iOS app, and this computer did not query Steps. No step total was saved, and none is invented here. A real daily total appears only after that iOS app, with read access allowed, stores it. The app reads once each time it opens, then about every 30 minutes while it stays open. It does not read in the background.';
+const REASON = 'Apple Health is not available in this preview. No step total was saved, and none is invented here. A real daily total appears only after the iOS app, with read access allowed, stores it.';
 
 function readDailyStepTotals() {
   return {

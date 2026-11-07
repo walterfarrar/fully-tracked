@@ -16,24 +16,31 @@
             <a href="#home">Home</a>
             <a href="#log">Log</a>
             <a href="#trends">Trends</a>
-            <a href="#map">Map</a>
+            <a href="#where">Map</a>
           </nav>
         </div>
-        <h1>A quiet journal on this computer.</h1>
-        <p class="lede">Where you were, what you ate and drank, and how the day went. No account.</p>
+        <nav class="actions" aria-label="Log">
+          <a href="#location">Location</a>
+          <a href="#meal-form">Meal</a>
+          <a href="#water-form">Water</a>
+          <a href="#bathroom-form">Bathroom</a>
+          <a href="#life-form">Life event</a>
+          <a href="#mood-form">Mood</a>
+          <a href="#sleep-form">Sleep</a>
+          <a href="#steps-chart">Steps</a>
+          <a href="#where">Map</a>
+        </nav>
       </header>
 
       <p id="banner" class="banner" hidden></p>
 
-      <section class="location-block" id="log" aria-labelledby="location-heading">
+      <section class="location-block" id="location" aria-labelledby="location-heading">
         <div class="section-head">
           <h2 id="location-heading">Location</h2>
           <p class="eyebrow">Automatic · device only</p>
         </div>
         <p class="note">
-          Location tracking is always on while this app is running, including when the tab is in
-          the background. Check-ins follow the interval below and are not second by second.
-          A fully quit browser has no GPS, so nothing is recorded after the browser process is gone.
+          Location tracking is always on. Check-ins follow the interval below and are not second by second.
           Permission is asked once.
         </p>
         <div class="interval-row">
@@ -43,13 +50,12 @@
         <p class="hint">
           Default 30. Minimum 5. Maximum 7 days. Tracking starts by itself and is remembered.
           The first reading asks for permission once. After that, check-ins repeat on this interval
-          with no extra taps and no coordinates to type. While the app is running it holds a screen
-          wake lock so the page is less likely to be suspended.
+          with no extra taps and no coordinates to type.
         </p>
         <p id="track-status" class="status" aria-live="polite"></p>
       </section>
 
-      <h2 class="group-title">Add an entry</h2>
+      <h2 class="group-title" id="log">Add an entry</h2>
       <div class="forms">
         <form id="meal-form" class="entry-form">
           <h3>Meal</h3>
@@ -199,7 +205,7 @@
               score, sleep is the hours logged that day, and steps are the day's total.
             </p>
             <p id="steps-note" class="note">
-              This browser cannot read Apple Health. No step count is shown until an iOS app saves a real daily total.
+              Apple Health is not available in this preview. No step count is shown until a saved daily total exists.
             </p>
           </div>
           <div id="range" class="range" role="group" aria-label="Chart range">
@@ -208,7 +214,7 @@
           </div>
         </div>
         <div class="chart-grid">
-          <article class="chart-card" data-chart="steps">
+          <article class="chart-card" id="steps-chart" data-chart="steps">
             <h3>Steps</h3>
             <p class="metric">Daily total</p>
             <p class="chart-summary"></p>
@@ -246,13 +252,13 @@
         </div>
       </section>
 
-      <section class="where" id="map" aria-labelledby="map-heading">
+      <section class="where" id="where" aria-labelledby="map-heading">
         <div class="section-head">
           <h2 id="map-heading">Where this device has been</h2>
           <p id="map-count" class="eyebrow"></p>
         </div>
         <p class="hint">
-          Each marker is a location check-in the browser recorded. There are no manual pins.
+          Each marker is a location check-in. There are no manual pins.
           Map images come from OpenStreetMap and need no API key.
         </p>
         <p id="map-empty" class="empty">
