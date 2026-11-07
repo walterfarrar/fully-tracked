@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Fully Tracked</title>
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="styles.css?v=app9" />
+    <link rel="stylesheet" href="styles.css?v=app10" />
   </head>
   <body style="background:#12110f;color:#f4f0ea">
     <div class="app">
@@ -17,7 +17,7 @@
           <p class="wordmark">Fully Tracked</p>
           <div class="section-head">
             <h1>Log</h1>
-            <button type="button" id="open-settings">Settings</button>
+            <button type="button" id="open-settings" class="icon-button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"/></svg></button>
           </div>
           <div class="actions">
             <button type="button" data-open="location">
@@ -48,6 +48,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3.5A7.5 7.5 0 1 0 20.5 14 6 6 0 0 1 16 3.5z"/></svg>
               <span>Sleep</span>
             </button>
+            <button type="button" data-open="dose">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3.5" width="8" height="17" rx="4"/><path d="M8 12h8"/></svg>
+              <span>Dose</span>
+            </button>
           </div>
           <p id="home-note" class="note" hidden></p>
           <input id="interval" type="number" min="5" max="10080" step="1" value="10" hidden>
@@ -57,7 +61,7 @@
         <div id="checkin" class="checkin" hidden role="dialog" aria-modal="true" aria-labelledby="checkin-heading">
           <div class="checkin-bar">
             <h2 id="checkin-heading">Check-in</h2>
-            <button type="button" id="checkin-close">Close</button>
+            <button type="button" id="checkin-close" class="icon-button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>
           <form id="meal-form" class="entry-form log-panel" data-panel="meal" hidden>
             <h3>Meal</h3>
@@ -71,10 +75,9 @@
             <div class="field">
               <label>Foods</label>
               <div id="meal-foods" class="choice-list"></div>
-              <div class="add-row">
-                <input id="meal-food-new" type="text" maxlength="80" placeholder="Add a food" autocomplete="off" />
-                <button type="button" id="meal-food-add">Add</button>
-              </div>
+              <div id="meal-weights"></div>
+              <p id="meal-food-empty" class="hint" hidden>None yet.</p>
+              <button type="button" id="meal-open-food-settings" class="icon-button" aria-label="Food"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"/></svg></button>
             </div>
             <div class="field">
               <label>Nutrition label</label>
@@ -114,7 +117,7 @@
             <div class="field">
               <label>Amount</label>
               <div id="oz-choices" class="choice-list"></div>
-              <button type="button" id="open-amount-settings" class="settings-link">Amount settings</button>
+              <button type="button" id="open-amount-settings" class="icon-button" aria-label="Hydration"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"/></svg></button>
             </div>
             <p class="form-error" role="alert"></p>
             <button type="submit">Save hydration</button>
@@ -135,23 +138,40 @@
                 <button type="button" data-kind="urine" aria-pressed="false">Urine</button>
               </div>
             </div>
-            <div class="field" id="bristol-options">
-              <label>Bristol scale</label>
-              <p class="hint">Types 1–7.</p>
-              <div id="bristol-choices" class="choice-list"></div>
+            <div id="stool-fields">
+              <div class="field">
+                <label>Bristol</label>
+                <div id="bristol-choices" class="choice-list"></div>
+              </div>
+              <div class="field">
+                <label>Color</label>
+                <div id="stool-colors" class="choice-list"></div>
+              </div>
+              <div class="field">
+                <label>Amount</label>
+                <div id="stool-amounts" class="choice-list"></div>
+              </div>
             </div>
-            <div class="field" id="urine-options" hidden>
-              <label>Color</label>
-              <div id="urine-colors" class="choice-list"></div>
-              <label>Amount</label>
-              <div id="urine-amounts" class="choice-list"></div>
+            <div id="urine-fields" hidden>
+              <div class="field">
+                <label>Color</label>
+                <div id="urine-colors" class="choice-list"></div>
+              </div>
+              <div class="field">
+                <label>Clarity</label>
+                <div id="urine-clarity" class="choice-list"></div>
+              </div>
+              <div class="field">
+                <label>Amount</label>
+                <div id="urine-amounts" class="choice-list"></div>
+              </div>
             </div>
             <div class="field">
-              <label for="bath-note">Note (optional)</label>
+              <label for="bath-note">Note</label>
               <input id="bath-note" name="note" type="text" maxlength="2000" />
             </div>
             <p class="form-error" role="alert"></p>
-            <button type="submit">Save bathroom</button>
+            <button type="submit">Save</button>
           </form>
 
           <form id="life-form" class="entry-form log-panel" data-panel="life" hidden>
@@ -225,22 +245,73 @@
             <p class="form-error" role="alert"></p>
             <button type="submit">Save sleep</button>
           </form>
+
+          <form id="dose-form" class="entry-form log-panel" data-panel="dose" hidden>
+            <h3>Dose</h3>
+            <div class="field">
+              <label>When</label>
+              <div class="when-control">
+                <button type="button" class="when-display"></button>
+                <input id="dose-when" class="when-input" name="occurredAt" type="datetime-local" required step="60" />
+              </div>
+            </div>
+            <p id="dose-empty" class="hint" hidden>None yet.</p>
+            <button type="button" id="dose-open-settings" class="icon-button" aria-label="Medication" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"/></svg></button>
+            <div id="dose-fields">
+              <div class="field">
+                <label>Substance</label>
+                <div id="dose-list" class="choice-list"></div>
+              </div>
+              <div class="field">
+                <label for="dose-amount">Amount</label>
+                <input id="dose-amount" type="number" min="0.01" step="any" inputmode="decimal" />
+                <p id="dose-unit" class="hint"></p>
+              </div>
+            </div>
+            <p class="form-error" role="alert"></p>
+            <button type="submit">Save</button>
+          </form>
         </div>
 
         <div id="settings" class="checkin" hidden>
           <div class="checkin-bar">
             <h2>Settings</h2>
-            <button type="button" id="settings-close">Close</button>
+            <button type="button" id="settings-close" class="icon-button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>
-          <section class="entry-form">
-            <h3>Hydration amounts</h3>
-            <p class="hint">Each label has its own ounces. A saved check-in keeps the ounces from when it was saved.</p>
+          <div id="settings-tabs" class="settings-tabs" role="tablist">
+            <button type="button" role="tab" data-settings-tab="hydration" aria-selected="true">Hydration</button>
+            <button type="button" role="tab" data-settings-tab="food" aria-selected="false">Food</button>
+            <button type="button" role="tab" data-settings-tab="medication" aria-selected="false">Medication</button>
+          </div>
+          <section class="entry-form" role="tabpanel" data-settings-panel="hydration">
+            <p class="hint">Ounces per label.</p>
             <div id="hydration-amount-rows"></div>
             <div class="add-row">
-              <input id="hydration-label-new" type="text" maxlength="40" placeholder="Add a label" autocomplete="off" />
+              <input id="hydration-label-new" type="text" maxlength="40" placeholder="Label" autocomplete="off" />
               <input id="hydration-ounces-new" type="number" min="0.1" step="0.1" inputmode="decimal" placeholder="Ounces" aria-label="Ounces" />
               <button type="button" id="hydration-label-add">Add</button>
             </div>
+          </section>
+          <section class="entry-form" role="tabpanel" data-settings-panel="food" hidden>
+            <div id="food-settings-list"></div>
+            <p id="food-settings-empty" class="hint">None yet.</p>
+            <div class="add-row">
+              <input id="food-settings-new" type="text" maxlength="80" placeholder="Food" autocomplete="off" />
+              <button type="button" id="food-settings-add">Add</button>
+            </div>
+          </section>
+          <section class="entry-form" role="tabpanel" data-settings-panel="medication" hidden>
+            <p class="hint">Name, dose, unit.</p>
+            <div id="substance-rows"></div>
+            <p id="substance-empty" class="hint">None yet.</p>
+            <div class="field">
+              <input id="substance-name" type="text" maxlength="80" placeholder="Name" autocomplete="off" />
+            </div>
+            <div class="field">
+              <input id="substance-dose" type="number" min="0.01" step="any" inputmode="decimal" placeholder="Dose" aria-label="Dose" />
+            </div>
+            <div id="substance-units" class="choice-list"></div>
+            <button type="button" id="substance-add">Add</button>
           </section>
         </div>
 
@@ -331,16 +402,16 @@
       </div>
 
       <nav class="tabs" aria-label="Sections">
-        <button type="button" class="tab" data-view="home" aria-current="page">Home</button>
-        <button type="button" class="tab" data-view="log">Log</button>
-        <button type="button" class="tab" data-view="graphs">Graphs</button>
-        <button type="button" class="tab" data-view="map">Map</button>
-        <button type="button" class="tab" data-view="correlations">Compare</button>
+        <button type="button" class="tab" data-view="home" aria-current="page" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M7 10.5V20h10v-9.5"/></svg></button>
+        <button type="button" class="tab" data-view="log" aria-label="Log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7h11M8 12h11M8 17h11"/><path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></svg></button>
+        <button type="button" class="tab" data-view="graphs" aria-label="Graphs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V10M12 19V5M19 19v-7"/></svg></button>
+        <button type="button" class="tab" data-view="map" aria-label="Map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.4 6-10a6 6 0 1 0-12 0c0 4.6 6 10 6 10z"/><circle cx="12" cy="11" r="1.8"/></svg></button>
+        <button type="button" class="tab" data-view="correlations" aria-label="Compare"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/></svg></button>
       </nav>
     </div>
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app14"></script>
+    <script src="app.js?v=app15"></script>
   </body>
 </html>

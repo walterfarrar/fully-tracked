@@ -15,6 +15,7 @@ const TYPE_LABELS = {
   mood: 'Mood',
   sleep: 'Sleep',
   steps: 'Steps',
+  dose: 'Dose',
 };
 
 const CHARTS = {
@@ -165,6 +166,7 @@ const DRINKS_KEY = 'fully-tracked-drinks';
 const EVENTS_KEY = 'fully-tracked-event-types';
 const EMOTIONS_KEY = 'fully-tracked-emotions';
 const HYDRATION_AMOUNTS_KEY = 'fully-tracked-hydration-amounts';
+const SUBSTANCES_KEY = 'fully-tracked-substances';
 const LEGACY_FOODS = ['Eggs', 'Oatmeal', 'Rice', 'Chicken', 'Salad', 'Fruit', 'Yogurt', 'Sandwich', 'Pasta', 'Soup'];
 const STARTER_DRINKS = ['Water', 'Coffee', 'Soda'];
 const STARTER_EVENTS = ['Family trip', 'Birthday'];
@@ -176,7 +178,11 @@ const STARTER_HYDRATION_AMOUNTS = [
   { label: 'can', ounces: 12 },
 ];
 const URINE_COLORS = ['Clear', 'Pale', 'Yellow', 'Dark', 'Amber'];
+const URINE_CLARITY = ['Clear', 'Cloudy'];
 const URINE_AMOUNTS = ['A little', 'Usual', 'A lot'];
+const STOOL_COLORS = ['Brown', 'Tan', 'Yellow', 'Green', 'Black', 'Red'];
+const STOOL_AMOUNTS = ['A little', 'Usual', 'A lot'];
+const DOSE_UNITS = ['mg', 'mcg', 'IU', 'tablet', 'capsule', 'ml'];
 const MOOD_TAGS = [
   'happy', 'sad', 'anxious', 'excited',
   'calm', 'angry', 'tired', 'stressed',
@@ -184,12 +190,19 @@ const MOOD_TAGS = [
   'grateful', 'lonely', 'frustrated', 'peaceful',
 ];
 let pickedFoods = new Set();
+let foodWeights = {};
 let pickedDrink = '';
 let pickedAmountLabel = '';
-let bathKind = 'stool';
+let stoolOn = true;
+let urineOn = false;
 let pickedBristol = 0;
+let pickedStoolColor = '';
+let pickedStoolAmount = '';
 let pickedUrineColor = '';
+let pickedUrineClarity = '';
 let pickedUrineAmount = '';
+let pickedSubstanceId = '';
+let newSubstanceUnit = 'mg';
 let pickedEvent = '';
 let pickedEmotions = new Set();
 let mealNutrition = null;
@@ -296,16 +309,65 @@ function emotionChoices() {
 }
 
 function renderMealFoods() {
+  const foods = readFoods();
+  const empty = document.getElementById('meal-food-empty');
+  if (empty) empty.hidden = foods.length > 0;
   fillChoices(
     document.getElementById('meal-foods'),
-    readFoods(),
+    foods,
     (name) => pickedFoods.has(name),
     (name) => {
-      if (pickedFoods.has(name)) pickedFoods.delete(name);
-      else pickedFoods.add(name);
+      if (pickedFoods.has(name)) {
+        pickedFoods.delete(name);
+        delete foodWeights[name];
+      } else {
+        pickedFoods.add(name);
+        foodWeights[name] = foodWeights[name] || { weight: '', unit: 'g' };
+      }
       renderMealFoods();
     }
   );
+  renderMealWeights();
+}
+
+function renderMealWeights() {
+  const root = document.getElementById('meal-weights');
+  if (!root) return;
+  root.replaceChildren();
+  [...pickedFoods].forEach((name) => {
+    const current = foodWeights[name] || { weight: '', unit: 'g' };
+    foodWeights[name] = current;
+    const row = document.createElement('div');
+    row.className = 'weight-row';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0.1';
+    input.step = 'any';
+    input.inputMode = 'decimal';
+    input.placeholder = 'Weight';
+    input.setAttribute('aria-label', `${name} weight`);
+    input.value = current.weight;
+    input.addEventListener('input', () => {
+      foodWeights[name].weight = input.value;
+    });
+    const units = document.createElement('div');
+    units.className = 'choice-list';
+    ['g', 'oz'].forEach((unit) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = unit;
+      button.setAttribute('aria-pressed', current.unit === unit ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        foodWeights[name].unit = unit;
+        renderMealWeights();
+      });
+      units.append(button);
+    });
+    row.append(label, input, units);
+    root.append(row);
+  });
 }
 
 function renderDrinks() {
@@ -384,12 +446,224 @@ function addHydrationLabel() {
   renderAmountChoices();
 }
 
-function openSettings() {
+function showSettingsTab(name) {
+  const tab = name === 'food' || name === 'medication' ? name : 'hydration';
+  document.querySelectorAll('[data-settings-tab]').forEach((button) => {
+    button.setAttribute('aria-selected', button.dataset.settingsTab === tab ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.settingsPanel !== tab;
+  });
+  if (tab === 'hydration') renderHydrationSettings();
+  if (tab === 'food') renderFoodSettings();
+  if (tab === 'medication') renderSubstanceSettings();
+}
+
+function openSettings(tab) {
   closeCheckIn();
   const layer = document.getElementById('settings');
   if (!layer) return;
-  renderHydrationSettings();
+  showSettingsTab(typeof tab === 'string' ? tab : 'hydration');
   layer.hidden = false;
+}
+
+function renderFoodSettings() {
+  const list = document.getElementById('food-settings-list');
+  const empty = document.getElementById('food-settings-empty');
+  if (!list) return;
+  const foods = readFoods();
+  list.replaceChildren();
+  if (empty) empty.hidden = foods.length > 0;
+  foods.forEach((name) => {
+    const row = document.createElement('div');
+    row.className = 'catalog-row';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      const next = readFoods().filter((item) => item.toLowerCase() !== name.toLowerCase());
+      localStorage.setItem(FOODS_KEY, JSON.stringify(next));
+      pickedFoods.delete(name);
+      delete foodWeights[name];
+      renderFoodSettings();
+      renderMealFoods();
+    });
+    row.append(label, remove);
+    list.append(row);
+  });
+}
+
+function addFoodFromSettings() {
+  const input = document.getElementById('food-settings-new');
+  const saved = rememberFood(input && input.value);
+  if (!saved) return;
+  input.value = '';
+  renderFoodSettings();
+  renderMealFoods();
+}
+
+function readSubstances() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SUBSTANCES_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => ({
+      id: String(item.id || ''),
+      name: String(item.name || '').trim(),
+      dose: Number(item.dose),
+      unit: String(item.unit || ''),
+    })).filter((item) => item.id && item.name && Number.isFinite(item.dose) && item.dose > 0 && DOSE_UNITS.includes(item.unit));
+  } catch {
+    return [];
+  }
+}
+
+function writeSubstances(items) {
+  localStorage.setItem(SUBSTANCES_KEY, JSON.stringify(items));
+}
+
+function substanceId() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+}
+
+function renderNewUnitChoices() {
+  fillChoices(
+    document.getElementById('substance-units'),
+    DOSE_UNITS,
+    (unit) => unit === newSubstanceUnit,
+    (unit) => {
+      newSubstanceUnit = unit;
+      renderNewUnitChoices();
+    }
+  );
+}
+
+function renderSubstanceSettings() {
+  const root = document.getElementById('substance-rows');
+  const empty = document.getElementById('substance-empty');
+  if (!root) return;
+  const items = readSubstances();
+  if (empty) empty.hidden = items.length > 0;
+  root.replaceChildren();
+  items.forEach((item) => {
+    const row = document.createElement('div');
+    row.className = 'substance-row';
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.maxLength = 80;
+    name.value = item.name;
+    name.setAttribute('aria-label', 'Name');
+    name.addEventListener('change', () => {
+      const next = readSubstances();
+      const found = next.find((entry) => entry.id === item.id);
+      const clean = name.value.trim().replace(/\s+/g, ' ');
+      if (!found || !clean) {
+        name.value = item.name;
+        return;
+      }
+      found.name = clean;
+      writeSubstances(next);
+    });
+    const dose = document.createElement('input');
+    dose.type = 'number';
+    dose.min = '0.01';
+    dose.step = 'any';
+    dose.inputMode = 'decimal';
+    dose.value = String(item.dose);
+    dose.setAttribute('aria-label', 'Dose');
+    dose.addEventListener('change', () => {
+      const value = Number(dose.value);
+      const next = readSubstances();
+      const found = next.find((entry) => entry.id === item.id);
+      if (!found || !Number.isFinite(value) || value <= 0) {
+        dose.value = String(item.dose);
+        return;
+      }
+      found.dose = value;
+      writeSubstances(next);
+    });
+    const units = document.createElement('div');
+    units.className = 'choice-list';
+    DOSE_UNITS.forEach((unit) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = unit;
+      button.setAttribute('aria-pressed', unit === item.unit ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        const next = readSubstances();
+        const found = next.find((entry) => entry.id === item.id);
+        if (!found) return;
+        found.unit = unit;
+        writeSubstances(next);
+        units.querySelectorAll('button').forEach((el) => {
+          el.setAttribute('aria-pressed', el.textContent === unit ? 'true' : 'false');
+        });
+      });
+      units.append(button);
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      writeSubstances(readSubstances().filter((entry) => entry.id !== item.id));
+      if (pickedSubstanceId === item.id) pickedSubstanceId = '';
+      renderSubstanceSettings();
+    });
+    const main = document.createElement('div');
+    main.className = 'row-main';
+    main.append(name, dose, remove);
+    row.append(main, units);
+    root.append(row);
+  });
+  renderNewUnitChoices();
+}
+
+function addSubstance() {
+  const nameInput = document.getElementById('substance-name');
+  const doseInput = document.getElementById('substance-dose');
+  const name = String(nameInput && nameInput.value || '').trim().replace(/\s+/g, ' ');
+  const dose = Number(doseInput && doseInput.value);
+  if (!name || !Number.isFinite(dose) || dose <= 0) return;
+  const items = readSubstances();
+  items.push({ id: substanceId(), name, dose, unit: newSubstanceUnit });
+  writeSubstances(items);
+  nameInput.value = '';
+  doseInput.value = '';
+  renderSubstanceSettings();
+}
+
+function renderDoseForm() {
+  const items = readSubstances();
+  const empty = document.getElementById('dose-empty');
+  const fields = document.getElementById('dose-fields');
+  const submit = document.querySelector('#dose-form button[type="submit"]');
+  const opener = document.getElementById('dose-open-settings');
+  const none = items.length === 0;
+  if (empty) empty.hidden = !none;
+  if (opener) opener.hidden = !none;
+  if (fields) fields.hidden = none;
+  if (submit) submit.hidden = none;
+  if (none) {
+    pickedSubstanceId = '';
+    return;
+  }
+  fillChoices(
+    document.getElementById('dose-list'),
+    items.map((item) => ({ label: item.name, id: item.id, dose: item.dose, unit: item.unit })),
+    (item) => item.id === pickedSubstanceId,
+    (item) => {
+      pickedSubstanceId = item.id;
+      const amount = document.getElementById('dose-amount');
+      const unit = document.getElementById('dose-unit');
+      if (amount) amount.value = String(item.dose);
+      if (unit) unit.textContent = item.unit;
+      renderDoseForm();
+    }
+  );
+  const chosen = items.find((item) => item.id === pickedSubstanceId);
+  const unit = document.getElementById('dose-unit');
+  if (unit) unit.textContent = chosen ? chosen.unit : '';
 }
 
 function closeSettings() {
@@ -411,12 +685,13 @@ function renderEvents() {
 
 function renderBathChoices() {
   document.querySelectorAll('#bath-kind-toggle button').forEach((button) => {
-    button.setAttribute('aria-pressed', button.dataset.kind === bathKind ? 'true' : 'false');
+    const on = button.dataset.kind === 'stool' ? stoolOn : urineOn;
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
-  const bristol = document.getElementById('bristol-options');
-  const urine = document.getElementById('urine-options');
-  if (bristol) bristol.hidden = bathKind !== 'stool';
-  if (urine) urine.hidden = bathKind !== 'urine';
+  const stool = document.getElementById('stool-fields');
+  const urine = document.getElementById('urine-fields');
+  if (stool) stool.hidden = !stoolOn;
+  if (urine) urine.hidden = !urineOn;
   fillChoices(
     document.getElementById('bristol-choices'),
     [1, 2, 3, 4, 5, 6, 7],
@@ -427,11 +702,38 @@ function renderBathChoices() {
     }
   );
   fillChoices(
+    document.getElementById('stool-colors'),
+    STOOL_COLORS,
+    (name) => name === pickedStoolColor,
+    (name) => {
+      pickedStoolColor = name;
+      renderBathChoices();
+    }
+  );
+  fillChoices(
+    document.getElementById('stool-amounts'),
+    STOOL_AMOUNTS,
+    (name) => name === pickedStoolAmount,
+    (name) => {
+      pickedStoolAmount = name;
+      renderBathChoices();
+    }
+  );
+  fillChoices(
     document.getElementById('urine-colors'),
     URINE_COLORS,
     (name) => name === pickedUrineColor,
     (name) => {
       pickedUrineColor = name;
+      renderBathChoices();
+    }
+  );
+  fillChoices(
+    document.getElementById('urine-clarity'),
+    URINE_CLARITY,
+    (name) => name === pickedUrineClarity,
+    (name) => {
+      pickedUrineClarity = name;
       renderBathChoices();
     }
   );
@@ -482,10 +784,18 @@ function renderCheckInChoices() {
 
 function resetCheckInState() {
   pickedFoods = new Set();
+  foodWeights = {};
   pickedDrink = '';
   pickedAmountLabel = '';
-  bathKind = 'stool';
+  stoolOn = true;
+  urineOn = false;
   pickedBristol = 0;
+  pickedStoolColor = '';
+  pickedStoolAmount = '';
+  pickedUrineColor = '';
+  pickedUrineClarity = '';
+  pickedUrineAmount = '';
+  pickedSubstanceId = '';
   pickedUrineColor = '';
   pickedUrineAmount = '';
   pickedEvent = '';
@@ -797,8 +1107,10 @@ function entryLines(entry) {
     ];
   }
   if (entry.type === 'meal') {
-    const foods = Array.isArray(entry.foods) && entry.foods.length ? entry.foods.join(', ') : entry.description;
-    const lines = foods ? [foods] : [];
+    const named = Array.isArray(entry.foods) ? entry.foods : [];
+    const lines = named.length && typeof named[0] === 'object'
+      ? named.map((item) => `${item.name} · ${formatNum(item.weight)} ${item.unit}`)
+      : (named.length ? [named.join(', ')] : (entry.description ? [entry.description] : []));
     if (entry.amountHad) lines.push(entry.amountHad);
     if (entry.calories != null && entry.calories !== '') lines.push(`${entry.calories} kcal`);
     return lines;
@@ -814,15 +1126,28 @@ function entryLines(entry) {
     return [`${name} · ${formatNum(entry.amountMl)} ml`];
   }
   if (entry.type === 'bathroom') {
-    const bits = [entry.kind === 'stool' ? 'Stool' : 'Urine'];
-    if (entry.kind === 'stool' && entry.bristolScale != null) bits.push(`Bristol ${entry.bristolScale}`);
-    if (entry.kind === 'urine') {
-      if (entry.urineColor) bits.push(entry.urineColor);
-      if (entry.urineAmount) bits.push(entry.urineAmount);
+    const lines = [];
+    const hasStool = entry.stool || entry.kind === 'stool' || entry.kind === 'both';
+    const hasUrine = entry.urine || entry.kind === 'urine' || entry.kind === 'both';
+    if (hasStool) {
+      const bits = ['Stool'];
+      if (entry.bristolScale != null) bits.push(`Bristol ${entry.bristolScale}`);
+      if (entry.stoolColor) bits.push(entry.stoolColor);
+      if (entry.stoolAmount) bits.push(entry.stoolAmount);
+      lines.push(bits.join(' · '));
     }
-    const lines = [bits.join(' · ')];
+    if (hasUrine) {
+      const bits = ['Urine'];
+      if (entry.urineColor) bits.push(entry.urineColor);
+      if (entry.urineClarity) bits.push(entry.urineClarity);
+      if (entry.urineAmount) bits.push(entry.urineAmount);
+      lines.push(bits.join(' · '));
+    }
     if (entry.note) lines.push(entry.note);
     return lines;
+  }
+  if (entry.type === 'dose') {
+    return [`${entry.substanceName} · ${formatNum(entry.amount)} ${entry.unit}`];
   }
   if (entry.type === 'life_event') {
     const lines = [entry.title];
@@ -1523,15 +1848,20 @@ function bindForm(id, build) {
 
 function bindForms() {
   bindForm('meal-form', (data) => {
-    const foods = [...pickedFoods];
+    const portions = [...pickedFoods].map((name) => {
+      const item = foodWeights[name] || {};
+      const weight = Number(item.weight);
+      if (!Number.isFinite(weight) || weight <= 0) throw new Error('Enter a weight.');
+      return { name, weight, unit: item.unit === 'oz' ? 'oz' : 'g' };
+    });
     const amountHad = document.getElementById('meal-amount').value.trim();
-    if (!foods.length && !(mealNutrition && mealNutrition.filledAny)) throw new Error('Choose a food.');
+    if (!portions.length && !(mealNutrition && mealNutrition.filledAny)) throw new Error('Choose a food.');
     if (mealNutrition && mealNutrition.filledAny && !amountHad) throw new Error('Enter how much you had.');
     return {
       type: 'meal',
       occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-      description: foods.join(', '),
-      foods,
+      description: portions.map((item) => item.name).join(', '),
+      foods: portions,
       amountHad: amountHad || undefined,
       ...nutritionPayload(mealNutrition),
     };
@@ -1549,18 +1879,26 @@ function bindForms() {
     };
   });
   bindForm('bathroom-form', (data) => {
+    if (!stoolOn && !urineOn) throw new Error('Choose stool, urine, or both.');
     const payload = {
       type: 'bathroom',
       occurredAt: fromDatetimeLocal(data.get('occurredAt')),
-      kind: bathKind,
+      kind: stoolOn && urineOn ? 'both' : (stoolOn ? 'stool' : 'urine'),
+      stool: stoolOn,
+      urine: urineOn,
       note: String(data.get('note') || ''),
     };
-    if (bathKind === 'stool') {
+    if (stoolOn) {
       if (!pickedBristol) throw new Error('Choose a Bristol type.');
+      if (!pickedStoolColor || !pickedStoolAmount) throw new Error('Choose a stool color and amount.');
       payload.bristolScale = pickedBristol;
-    } else {
-      if (!pickedUrineColor || !pickedUrineAmount) throw new Error('Choose a urine color and amount.');
+      payload.stoolColor = pickedStoolColor;
+      payload.stoolAmount = pickedStoolAmount;
+    }
+    if (urineOn) {
+      if (!pickedUrineColor || !pickedUrineClarity || !pickedUrineAmount) throw new Error('Choose a urine color, clarity, and amount.');
       payload.urineColor = pickedUrineColor;
+      payload.urineClarity = pickedUrineClarity;
       payload.urineAmount = pickedUrineAmount;
     }
     return payload;
@@ -1587,6 +1925,19 @@ function bindForms() {
       emotions: [...pickedEmotions],
     };
   });
+  bindForm('dose-form', (data) => {
+    const item = readSubstances().find((entry) => entry.id === pickedSubstanceId);
+    if (!item) throw new Error('Choose one.');
+    const amount = Number(document.getElementById('dose-amount').value);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter an amount.');
+    return {
+      type: 'dose',
+      occurredAt: fromDatetimeLocal(data.get('occurredAt')),
+      substanceName: item.name,
+      amount,
+      unit: item.unit,
+    };
+  });
   bindForm('sleep-form', (data) => ({
     type: 'sleep',
     occurredAt: fromDatetimeLocal(data.get('occurredAt')),
@@ -1596,14 +1947,9 @@ function bindForms() {
   document.getElementById('bath-kind-toggle').addEventListener('click', (event) => {
     const button = event.target.closest('button[data-kind]');
     if (!button) return;
-    bathKind = button.dataset.kind;
+    if (button.dataset.kind === 'stool') stoolOn = !stoolOn;
+    else urineOn = !urineOn;
     renderBathChoices();
-  });
-  document.getElementById('meal-food-add').addEventListener('click', addTypedFood);
-  document.getElementById('meal-food-new').addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    addTypedFood();
   });
   document.getElementById('drink-add').addEventListener('click', addTypedDrink);
   document.getElementById('drink-new').addEventListener('keydown', (event) => {
@@ -1624,9 +1970,28 @@ function bindForms() {
     event.preventDefault();
     addTypedEmotion();
   });
-  document.getElementById('open-settings').addEventListener('click', openSettings);
-  document.getElementById('open-amount-settings').addEventListener('click', openSettings);
+  document.getElementById('open-settings').addEventListener('click', () => openSettings('hydration'));
+  document.getElementById('open-amount-settings').addEventListener('click', () => openSettings('hydration'));
+  document.getElementById('meal-open-food-settings').addEventListener('click', () => openSettings('food'));
+  document.getElementById('dose-open-settings').addEventListener('click', () => openSettings('medication'));
+  document.getElementById('settings-tabs').addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-settings-tab]');
+    if (!tab) return;
+    openSettings(tab.dataset.settingsTab);
+  });
   document.getElementById('settings-close').addEventListener('click', closeSettings);
+  document.getElementById('food-settings-add').addEventListener('click', addFoodFromSettings);
+  document.getElementById('food-settings-new').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addFoodFromSettings();
+  });
+  document.getElementById('substance-add').addEventListener('click', addSubstance);
+  document.getElementById('substance-name').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addSubstance();
+  });
   document.getElementById('hydration-label-add').addEventListener('click', addHydrationLabel);
   document.getElementById('hydration-label-new').addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
@@ -1737,6 +2102,7 @@ function openCheckIn(kind) {
   layer.hidden = false;
   stampCheckInTimes();
   if (kind === 'bathroom') syncBristol();
+  if (kind === 'dose') renderDoseForm();
 }
 
 function closeCheckIn() {
@@ -1800,7 +2166,7 @@ function renderCorrelations() {
       return Number.isFinite(eaten) && eaten <= at && at - eaten <= windowMs;
     });
     if (meal) {
-      const mealName = meal.description || (Array.isArray(meal.foods) ? meal.foods.join(', ') : 'a meal');
+      const mealName = meal.description || (Array.isArray(meal.foods) ? meal.foods.map((item) => (typeof item === 'string' ? item : item.name)).join(', ') : 'a meal');
       el.textContent = `A mood of ${mood.moodScore} lined up within 4 hours of ${mealName}.`;
       return;
     }

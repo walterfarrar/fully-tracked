@@ -408,12 +408,85 @@ input[type="range"] {
 
 .settings-link { margin-top: 0.7rem; }
 
-.amount-row {
+.amount-row,
+.catalog-row,
+.weight-row,
+.substance-row .row-main {
   display: grid;
-  grid-template-columns: 1fr 7rem;
+  grid-template-columns: 1fr 7rem auto;
   gap: 0.7rem;
   align-items: center;
   margin-top: 0.7rem;
+}
+
+.substance-row { margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px solid var(--line); }
+
+.catalog-row button,
+.substance-row .row-main button {
+  margin: 0;
+  background: transparent;
+  color: #f4f0ea;
+  border: 0;
+  border-bottom: 1px solid #d4b896;
+  padding: 0.15rem 0;
+  cursor: pointer;
+}
+
+.settings-tabs { display: flex; flex-wrap: wrap; gap: 0.85rem; margin: 0.3rem 0 0.2rem; }
+
+.settings-tabs button {
+  margin: 0;
+  padding: 0.15rem 0;
+  background: transparent;
+  color: #a89f94;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.settings-tabs button[aria-selected="true"] {
+  color: #f4f0ea;
+  border-bottom-color: #d4b896;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.7rem 0 0;
+  padding: 0.15rem;
+  background: transparent;
+  color: #f4f0ea;
+  border: 0;
+  cursor: pointer;
+}
+
+#open-settings.icon-button,
+.checkin-bar .icon-button { margin: 0; border-bottom: 0; }
+
+.icon-button svg { width: 22px; height: 22px; display: block; }
+
+.icon-button svg,
+.icon-button svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tabs button { color: #d4b896; }
+
+.tabs svg { width: 24px; height: 24px; display: block; margin: 0 auto; }
+
+.tabs svg,
+.tabs svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 @media (max-width: 380px) {
