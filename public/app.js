@@ -516,7 +516,7 @@ async function tick() {
   } finally {
     recording = false;
   }
-  if (!tracking || outcome === 'denied') return;
+  if (!tracking || outcome === 'stopped') return;
   scheduleIn(intervalMs());
 }
 
