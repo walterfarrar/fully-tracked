@@ -39,7 +39,7 @@ let trendsToken = 0;
 let dataToken = 0;
 let map = null;
 let markerLayer = null;
-let mapNote = 'Allow location to center this map. Saved check-ins appear as markers.';
+let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
 let mappedCount = -1;
 
 const intervalInput = document.getElementById('interval');
@@ -411,16 +411,6 @@ function ensureMap() {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
-    const icon = L.icon({
-      iconUrl: 'vendor/leaflet/images/marker-icon.png',
-      iconRetinaUrl: 'vendor/leaflet/images/marker-icon-2x.png',
-      shadowUrl: 'vendor/leaflet/images/marker-shadow.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41],
-    });
-    map._fullyTrackedIcon = icon;
   }
   return map;
 }
@@ -429,7 +419,7 @@ function showDeviceOnMap(latitude, longitude) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   if (!ensureMap()) return;
   map.setView([latitude, longitude], 13);
-  setMapNote('Centered on this device. Saved check-ins appear as markers.');
+  setMapNote('Centered on this device. Visited cells darken with each check-in.');
   window.setTimeout(() => map.invalidateSize(), 0);
 }
 
@@ -445,26 +435,42 @@ function renderMap(entries) {
     count.textContent = '';
     mappedCount = 0;
     markerLayer.clearLayers();
-    setMapNote(mapNote || 'Allow location to center this map. Saved check-ins appear as markers.');
+    setMapNote(mapNote || 'Allow location to center this map. Visited cells darken with each check-in.');
     window.setTimeout(() => map.invalidateSize(), 0);
     return;
   }
   setMapNote('');
   count.textContent = points.length === 1 ? '1 check-in' : `${points.length} check-ins`;
   markerLayer.clearLayers();
-  const markers = points.map((point) => {
-    const when = formatWhen(point.occurredAt);
-    return L.marker([point.latitude, point.longitude], {
-      icon: map._fullyTrackedIcon,
-      title: when,
-    }).bindPopup(
-      `<strong>Device check-in</strong><br>${escapeHtml(when)}<br>${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}<br>±${Math.round(point.accuracyMeters)} m · device`
-    );
+  const cells = new Map();
+  for (const point of points) {
+    const south = Math.floor(point.latitude / 0.005) * 0.005;
+    const west = Math.floor(point.longitude / 0.005) * 0.005;
+    const key = `${south.toFixed(5)},${west.toFixed(5)}`;
+    const cell = cells.get(key) || { south, west, north: south + 0.005, east: west + 0.005, count: 0 };
+    cell.count += 1;
+    cells.set(key, cell);
+  }
+  const drawn = [...cells.values()];
+  const busiest = drawn.reduce((max, cell) => Math.max(max, cell.count), 1);
+  const shapes = drawn.map((cell) => {
+    const mix = busiest <= 1 ? 0 : (cell.count - 1) / (busiest - 1);
+    const red = Math.round(212 + (18 - 212) * mix);
+    const green = Math.round(184 + (17 - 184) * mix);
+    const blue = Math.round(150 + (15 - 150) * mix);
+    const label = cell.count === 1 ? '1 check-in in this cell' : `${cell.count} check-ins in this cell`;
+    return L.rectangle([[cell.south, cell.west], [cell.north, cell.east]], {
+      color: '#12110f',
+      weight: 1,
+      fillColor: `rgb(${red}, ${green}, ${blue})`,
+      fillOpacity: 0.45 + 0.45 * mix,
+    }).bindPopup(label);
   });
-  markers.forEach((marker) => marker.addTo(markerLayer));
+  shapes.forEach((shape) => shape.addTo(markerLayer));
   if (points.length !== mappedCount) {
-    if (points.length === 1) map.setView(markers[0].getLatLng(), 14);
-    else map.fitBounds(L.latLngBounds(markers.map((marker) => marker.getLatLng())).pad(0.25));
+    const bounds = L.latLngBounds(shapes.map((shape) => shape.getBounds()));
+    if (drawn.length === 1) map.fitBounds(bounds.pad(0.8));
+    else map.fitBounds(bounds.pad(0.25));
     mappedCount = points.length;
   }
   window.setTimeout(() => map.invalidateSize(), 0);
