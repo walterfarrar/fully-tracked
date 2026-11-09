@@ -12,9 +12,11 @@ struct MapScreen: View {
     @State private var latestRegion: MKCoordinateRegion?
     @State private var appliedToken: UUID?
 
+    /// Interval and manual check-ins only. Trip, significant-change, and visit points are not cells.
     private var points: [JournalEntry] {
         entries.filter { entry in
             guard entry.entryType == .location,
+                  entry.source == nil || entry.source == "device",
                   let latitude = entry.latitude,
                   let longitude = entry.longitude else { return false }
             return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
@@ -46,7 +48,7 @@ struct MapScreen: View {
                     .textCase(.uppercase)
                     .foregroundStyle(Theme.muted)
             }
-            if points.isEmpty && visitMarks.isEmpty {
+            if points.isEmpty {
                 Text("Allow location to center this map. Visited cells darken with each check-in.")
                     .font(Theme.font(15))
                     .foregroundStyle(Theme.muted)
@@ -74,11 +76,6 @@ struct MapScreen: View {
                 ForEach(cells) { cell in
                     MapPolygon(coordinates: cell.coordinates)
                         .foregroundStyle(cell.color.opacity(cell.opacity))
-                }
-                ForEach(visitMarks) { mark in
-                    Annotation(mark.title, coordinate: mark.coordinate, anchor: .bottom) {
-                        VisitPin(title: mark.title)
-                    }
                 }
             }
             .mapStyle(.standard)
@@ -114,44 +111,8 @@ struct MapScreen: View {
         }
     }
 
-    private var visitMarks: [VisitMark] {
-        var best: [String: JournalEntry] = [:]
-        for entry in entries where entry.entryType == .visit {
-            guard let latitude = entry.latitude, let longitude = entry.longitude else { continue }
-            guard latitude >= -90, latitude <= 90, longitude >= -180, longitude <= 180 else { continue }
-            let key = String(format: "%.3f,%.3f", locale: Locale(identifier: "en_US_POSIX"), latitude, longitude)
-            if let existing = best[key] {
-                if prefer(entry, over: existing) {
-                    best[key] = entry
-                }
-            } else {
-                best[key] = entry
-            }
-        }
-        return best.map { key, entry in
-            let name = entry.placeName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return VisitMark(
-                id: key,
-                coordinate: CLLocationCoordinate2D(latitude: entry.latitude ?? 0, longitude: entry.longitude ?? 0),
-                title: name.isEmpty ? "Visit" : name
-            )
-        }
-        .sorted { $0.title < $1.title }
-    }
-
     private var mapAccessLabel: String {
-        let checkIns = points.count == 1 ? "1 location check-in" : "\(points.count) location check-ins"
-        let visits = visitMarks.count == 1 ? "1 visit" : "\(visitMarks.count) visits"
-        return "\(checkIns), \(visits)"
-    }
-
-    private func prefer(_ candidate: JournalEntry, over existing: JournalEntry) -> Bool {
-        let candidateNamed = !(candidate.placeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        let existingNamed = !(existing.placeName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        if candidateNamed != existingNamed {
-            return candidateNamed
-        }
-        return candidate.occurredAt > existing.occurredAt
+        points.count == 1 ? "1 location check-in" : "\(points.count) location check-ins"
     }
 
     private func applyFocusIfNeeded() {
@@ -164,34 +125,6 @@ struct MapScreen: View {
                 span: MKCoordinateSpan(latitudeDelta: 0.006, longitudeDelta: 0.006)
             )
         )
-    }
-}
-
-private struct VisitMark: Identifiable {
-    var id: String
-    var coordinate: CLLocationCoordinate2D
-    var title: String
-}
-
-private struct VisitPin: View {
-    var title: String
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(title)
-                .font(Theme.font(11, weight: .medium))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(1)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Theme.background.opacity(0.92), in: Capsule())
-            Circle()
-                .fill(Theme.accent)
-                .frame(width: 9, height: 9)
-                .overlay(Circle().stroke(Theme.ink, lineWidth: 1))
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
     }
 }
 
