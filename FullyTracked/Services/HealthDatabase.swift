@@ -288,7 +288,7 @@ enum HealthDatabase {
 
     private static func samples(uuid: UUID, context: ModelContext) throws -> [HealthSample] {
         let identifier: UUID? = uuid
-        let descriptor = FetchDescriptor<HealthSample>(
+        var descriptor = FetchDescriptor<HealthSample>(
             predicate: #Predicate<HealthSample> { sample in
                 sample.hkUUID == identifier
             }
