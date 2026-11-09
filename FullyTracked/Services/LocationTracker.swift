@@ -532,7 +532,8 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             entry.weatherObservedAt = nil
             try? context.save()
             if announce {
-                lastEvent = "The last check-in has no weather. The weather request failed, and no reading was invented."
+                let reason = WeatherClient.lastFailure.map { " \($0)" } ?? ""
+                lastEvent = "The last check-in has no weather. The weather request failed, and no reading was invented.\(reason)"
             }
             return
         }

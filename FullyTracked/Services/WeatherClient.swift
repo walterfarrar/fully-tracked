@@ -12,6 +12,9 @@ struct WeatherReading: Sendable {
 }
 
 enum WeatherClient {
+    /// The error text from the most recent failed WeatherKit request, shown with the check-in.
+    @MainActor static var lastFailure: String?
+
     /// Current conditions from WeatherKit. A failed request returns nil.
     /// The caller stores no weather in that case.
     static func fetch(latitude: Double, longitude: Double) async -> WeatherReading? {
@@ -33,8 +36,12 @@ enum WeatherClient {
         do {
             let current = try await WeatherService.shared.weather(for: location, including: .current)
             let celsius = current.temperature.converted(to: .celsius).value
-            guard celsius.isFinite else { return nil }
+            guard celsius.isFinite else {
+                await MainActor.run { WeatherClient.lastFailure = "WeatherKit returned no temperature." }
+                return nil
+            }
             let condition = conditionText(current.condition)
+            await MainActor.run { WeatherClient.lastFailure = nil }
             return WeatherReading(
                 observedAt: current.date,
                 latitude: latitude,
@@ -43,6 +50,8 @@ enum WeatherClient {
                 condition: condition
             )
         } catch {
+            let detail = String(String(describing: error).prefix(300))
+            await MainActor.run { WeatherClient.lastFailure = detail }
             return nil
         }
     }
