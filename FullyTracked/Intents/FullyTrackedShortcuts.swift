@@ -1,8 +1,8 @@
 import AppIntents
 
 struct FullyTrackedShortcuts: AppShortcutsProvider {
+    // `appShortcuts` is an @AppShortcutsBuilder; list the shortcuts directly, not in an array literal.
     static var appShortcuts: [AppShortcut] {
-        [
             AppShortcut(
                 intent: LogDrinkIntent(),
                 phrases: [
@@ -11,7 +11,7 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Log a drink",
                 systemImageName: "cup.and.saucer"
-            ),
+            )
             AppShortcut(
                 intent: LogMoodIntent(),
                 phrases: [
@@ -20,7 +20,7 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Log mood",
                 systemImageName: "face.smiling"
-            ),
+            )
             AppShortcut(
                 intent: LogWaterIntent(),
                 phrases: [
@@ -29,7 +29,7 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Log water",
                 systemImageName: "drop"
-            ),
+            )
             AppShortcut(
                 intent: LogSleepIntent(),
                 phrases: [
@@ -38,7 +38,7 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Log sleep",
                 systemImageName: "moon"
-            ),
+            )
             AppShortcut(
                 intent: LogDoseIntent(),
                 phrases: [
@@ -47,7 +47,7 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Log a dose",
                 systemImageName: "pills"
-            ),
+            )
             AppShortcut(
                 intent: CheckInLocationIntent(),
                 phrases: [
@@ -56,7 +56,7 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Check in",
                 systemImageName: "mappin.and.ellipse"
-            ),
+            )
             AppShortcut(
                 intent: TodaySummaryIntent(),
                 phrases: [
@@ -65,7 +65,6 @@ struct FullyTrackedShortcuts: AppShortcutsProvider {
                 ],
                 shortTitle: "Today",
                 systemImageName: "list.bullet"
-            ),
-        ]
+            )
     }
 }

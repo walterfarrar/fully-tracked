@@ -164,7 +164,7 @@ enum HealthDatabase {
         let context = makeContext(container)
         let key = "stateOfMind"
         let lower = windowStart
-        var descriptor = FetchDescriptor<HealthSample>(
+        let descriptor = FetchDescriptor<HealthSample>(
             predicate: #Predicate<HealthSample> { sample in
                 sample.typeRaw == key && sample.startDate >= lower
             }
@@ -288,7 +288,7 @@ enum HealthDatabase {
 
     private static func samples(uuid: UUID, context: ModelContext) throws -> [HealthSample] {
         let identifier: UUID? = uuid
-        var descriptor = FetchDescriptor<HealthSample>(
+        let descriptor = FetchDescriptor<HealthSample>(
             predicate: #Predicate<HealthSample> { sample in
                 sample.hkUUID == identifier
             }
