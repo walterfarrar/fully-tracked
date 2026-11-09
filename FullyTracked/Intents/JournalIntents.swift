@@ -51,7 +51,7 @@ enum JournalIntentStore {
 }
 
 struct LogDrinkIntent: AppIntent {
-    static var title: LocalizedStringResource { "Log a Drink" }
+    static var title: LocalizedStringResource = "Log a Drink"
     static var description = IntentDescription("Save a drink in the journal on this phone.")
 
     @Parameter(title: "Drink")
@@ -82,7 +82,7 @@ struct LogDrinkIntent: AppIntent {
 }
 
 struct LogMoodIntent: AppIntent {
-    static var title: LocalizedStringResource { "Log Mood" }
+    static var title: LocalizedStringResource = "Log Mood"
     static var description = IntentDescription("Save a mood score in the journal on this phone.")
 
     @Parameter(title: "Score", description: "A mood score from 1 to 10.")
@@ -112,7 +112,7 @@ struct LogMoodIntent: AppIntent {
 }
 
 struct LogWaterIntent: AppIntent {
-    static var title: LocalizedStringResource { "Log Water" }
+    static var title: LocalizedStringResource = "Log Water"
     static var description = IntentDescription("Save water you drank in the journal on this phone.")
 
     @Parameter(title: "Ounces", description: "How many ounces of water.")
@@ -133,7 +133,7 @@ struct LogWaterIntent: AppIntent {
 }
 
 struct LogSleepIntent: AppIntent {
-    static var title: LocalizedStringResource { "Log Sleep" }
+    static var title: LocalizedStringResource = "Log Sleep"
     static var description = IntentDescription("Save hours slept in the journal on this phone.")
 
     @Parameter(title: "Hours", description: "Hours slept, from 0.1 to 24.")
@@ -156,7 +156,7 @@ struct LogSleepIntent: AppIntent {
 }
 
 struct LogDoseIntent: AppIntent {
-    static var title: LocalizedStringResource { "Log a Dose" }
+    static var title: LocalizedStringResource = "Log a Dose"
     static var description = IntentDescription("Save a catalog dose in the journal on this phone.")
 
     @Parameter(title: "Substance")
@@ -188,7 +188,7 @@ struct LogDoseIntent: AppIntent {
 }
 
 struct CheckInLocationIntent: AppIntent {
-    static var title: LocalizedStringResource { "Check In Location" }
+    static var title: LocalizedStringResource = "Check In Location"
     static var description = IntentDescription("Save one location check-in on this phone.")
 
     @MainActor
@@ -209,11 +209,11 @@ struct CheckInLocationIntent: AppIntent {
 
 @available(*, deprecated)
 extension CheckInLocationIntent {
-    static var openAppWhenRun: Bool { true }
+    static var openAppWhenRun: Bool = true
 }
 
 struct TodaySummaryIntent: AppIntent {
-    static var title: LocalizedStringResource { "Today's Summary" }
+    static var title: LocalizedStringResource = "Today's Summary"
     static var description = IntentDescription("Speak a short summary of today's journal on this phone.")
 
     @MainActor

@@ -2,7 +2,7 @@ import AppIntents
 import SwiftData
 
 struct DrinkEntity: AppEntity, Sendable {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Drink", numericFormat: nil)
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Drink")
     static var defaultQuery = DrinkEntityQuery()
 
     var id: String
@@ -58,7 +58,7 @@ struct DrinkEntityQuery: EntityStringQuery {
 }
 
 struct SubstanceEntity: AppEntity, Sendable {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Substance", numericFormat: nil)
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Substance")
     static var defaultQuery = SubstanceEntityQuery()
 
     var id: String
