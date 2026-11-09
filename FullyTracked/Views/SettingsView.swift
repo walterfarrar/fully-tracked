@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @EnvironmentObject private var tracker: LocationTracker
+    @EnvironmentObject private var health: HealthSteps
     @Query private var entries: [JournalEntry]
     @Query private var amounts: [HydrationAmount]
     @Query private var foods: [FoodItem]
@@ -24,6 +25,12 @@ struct SettingsView: View {
     @State private var newSubstanceName = ""
     @State private var newSubstanceDose = ""
     @State private var newSubstanceUnit = "mg"
+    @State private var showHealth = false
+    @AppStorage(HealthWriteKey.water) private var writeWater = true
+    @AppStorage(HealthWriteKey.caffeine) private var writeCaffeine = true
+    @AppStorage(HealthWriteKey.nutrition) private var writeNutrition = true
+    @AppStorage(HealthWriteKey.sleep) private var writeSleep = true
+    @AppStorage(HealthWriteKey.mood) private var writeMood = true
 
     init(initialTab: SettingsTab) {
         _tab = State(initialValue: initialTab)
@@ -74,34 +81,30 @@ struct SettingsView: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 16) {
                         ForEach(SettingsTab.allCases) { item in
-                            Button {
+                            settingsTab(title: item.title, selected: !showHealth && tab == item) {
+                                showHealth = false
                                 tab = item
-                            } label: {
-                                Text(item.title)
-                                    .font(Theme.font(16))
-                                    .foregroundStyle(tab == item ? Theme.ink : Theme.muted)
-                                    .padding(.bottom, 6)
-                                    .overlay(alignment: .bottom) {
-                                        Rectangle()
-                                            .fill(tab == item ? Theme.accent : Color.clear)
-                                            .frame(height: 1)
-                                    }
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(tab == item ? .isSelected : AccessibilityTraits())
+                        }
+                        settingsTab(title: "Health", selected: showHealth) {
+                            showHealth = true
                         }
                     }
                 }
                 .scrollIndicators(.hidden)
-                switch tab {
-                case .hydration:
-                    hydrationPanel
-                case .food:
-                    foodPanel
-                case .medication:
-                    medicationPanel
-                case .location:
-                    locationPanel
+                if showHealth {
+                    healthPanel
+                } else {
+                    switch tab {
+                    case .hydration:
+                        hydrationPanel
+                    case .food:
+                        foodPanel
+                    case .medication:
+                        medicationPanel
+                    case .location:
+                        locationPanel
+                    }
                 }
             }
             .padding(20)
@@ -302,6 +305,70 @@ struct SettingsView: View {
                 .foregroundStyle(Theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var healthPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button("Sync now") {
+                health.refresh()
+            }
+            .buttonStyle(QuietButtonStyle())
+            Text(health.status)
+                .font(Theme.font(14))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let lastSync = health.lastSync {
+                Text("Last sync \(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                    .font(Theme.font(15))
+                    .foregroundStyle(Theme.ink)
+            } else {
+                Text("No sync yet.")
+                    .font(Theme.font(15))
+                    .foregroundStyle(Theme.muted)
+            }
+            Text("\(health.sampleCount.formatted(.number.grouping(.automatic))) samples on this device.")
+                .font(Theme.font(15))
+                .foregroundStyle(Theme.ink)
+            Text("Write back")
+                .font(Theme.font(15))
+                .foregroundStyle(Theme.muted)
+                .padding(.top, 4)
+            writeToggle("Water", isOn: $writeWater)
+            writeToggle("Caffeine", isOn: $writeCaffeine)
+            writeToggle("Nutrition", isOn: $writeNutrition)
+            writeToggle("Sleep", isOn: $writeSleep)
+            writeToggle("Mood", isOn: $writeMood)
+            Text("iOS has no link that opens Health permissions. Open the Health app, then Sharing, then Apps, then Fully Tracked.")
+                .font(Theme.font(14))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+        }
+    }
+
+    private func writeToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Text(title)
+                .font(Theme.font(17))
+                .foregroundStyle(Theme.ink)
+        }
+        .tint(Theme.accent)
+    }
+
+    private func settingsTab(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.font(16))
+                .foregroundStyle(selected ? Theme.ink : Theme.muted)
+                .padding(.bottom, 6)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(selected ? Theme.accent : Color.clear)
+                        .frame(height: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
     }
 
     private func addAmount() {

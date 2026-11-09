@@ -47,11 +47,18 @@ struct SleepForm: View {
         entry.sleepHours = hours
         let note = FormValues.clean(noteText, limit: 2000)
         entry.note = note.isEmpty ? nil : note
+        let entryID = entry.id
+        let when = entry.occurredAt
+        let slept = hours
         do {
             try JournalSave.commit(entry, in: context)
-            dismiss()
         } catch {
             self.error = "The entry could not be saved."
+            return
         }
+        Task {
+            await HealthWriter.writeSleep(entryID: entryID, occurredAt: when, hours: slept)
+        }
+        dismiss()
     }
 }

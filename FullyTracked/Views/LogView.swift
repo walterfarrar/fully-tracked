@@ -100,7 +100,7 @@ struct LogView: View {
     }
 
     private var logTypes: [EntryType] {
-        [.location, .meal, .hydration, .bathroom, .mood, .lifeEvent, .dose, .sleep, .steps]
+        [.location, .visit, .activity, .meal, .hydration, .bathroom, .mood, .lifeEvent, .dose, .sleep, .steps]
     }
 
     private var countText: String {
@@ -119,7 +119,7 @@ struct LogView: View {
         if let filter {
             return "No \(filter.title) entries yet."
         }
-        return "Nothing here yet. Location check-ins appear when tracking is on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand."
+        return "Nothing here yet. Location check-ins, visits, and activity appear when tracking is on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand."
     }
 
     private func dayTitle(_ day: Date) -> String {
@@ -131,14 +131,14 @@ struct LogView: View {
 
     @ViewBuilder
     private func row(_ entry: JournalEntry) -> some View {
-        if entry.entryType == .location, let latitude = entry.latitude, let longitude = entry.longitude {
+        if showsOnMap(entry), let latitude = entry.latitude, let longitude = entry.longitude {
             Button {
                 navigation.showOnMap(latitude: latitude, longitude: longitude)
             } label: {
                 rowLabel(entry)
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Shows this check-in on the map")
+            .accessibilityHint(entry.entryType == .visit ? "Shows this visit on the map" : "Shows this check-in on the map")
         } else {
             rowLabel(entry)
         }
@@ -163,6 +163,15 @@ struct LogView: View {
                 .multilineTextAlignment(.leading)
         }
         .padding(.vertical, 6)
+    }
+
+    private func showsOnMap(_ entry: JournalEntry) -> Bool {
+        switch entry.entryType {
+        case .location, .visit:
+            return entry.latitude != nil && entry.longitude != nil
+        default:
+            return false
+        }
     }
 
     private func delete(_ entry: JournalEntry) {

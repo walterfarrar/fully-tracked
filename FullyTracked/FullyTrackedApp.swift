@@ -8,27 +8,8 @@ struct FullyTrackedApp: App {
     private let container: ModelContainer
 
     init() {
-        let schema = Schema([
-            JournalEntry.self,
-            Drink.self,
-            StrengthLevel.self,
-            StrengthScaleSetting.self,
-            FoodItem.self,
-            HydrationAmount.self,
-            EventType.self,
-            Emotion.self,
-            Substance.self,
-        ])
-        let configuration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: .none
-        )
-        do {
-            container = try ModelContainer(for: schema, configurations: [configuration])
-        } catch {
-            fatalError("The journal store could not be opened.")
-        }
+        // One store, shared with App Intents. The schema lives in SharedContainer.
+        container = SharedContainer.container
         LocationTracker.shared.attach(container)
         HealthSteps.shared.attach(container)
     }

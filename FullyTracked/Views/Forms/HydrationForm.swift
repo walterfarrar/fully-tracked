@@ -101,11 +101,26 @@ struct HydrationForm: View {
         if let selectedStrength, !selectedStrength.isEmpty {
             entry.strength = selectedStrength
         }
+        let entryID = entry.id
+        let when = entry.occurredAt
+        let drink = drinkName
+        let milliliters = entry.amountMl
+        let strength = entry.strength
         do {
             try JournalSave.commit(entry, in: context)
-            dismiss()
         } catch {
             self.error = "The entry could not be saved."
+            return
         }
+        Task {
+            await HealthWriter.writeHydration(
+                entryID: entryID,
+                occurredAt: when,
+                drinkName: drink,
+                amountMl: milliliters,
+                strength: strength
+            )
+        }
+        dismiss()
     }
 }

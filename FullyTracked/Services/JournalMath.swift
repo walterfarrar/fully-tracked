@@ -8,6 +8,8 @@ enum TrendMetric: String, CaseIterable, Identifiable, Hashable {
     case sleep
     case steps
     case temperature
+    case activeMinutes
+    case placesVisited
 
     var id: String { rawValue }
 
@@ -20,6 +22,8 @@ enum TrendMetric: String, CaseIterable, Identifiable, Hashable {
         case .sleep: "Sleep"
         case .steps: "Steps"
         case .temperature: "Temperature"
+        case .activeMinutes: "Active minutes"
+        case .placesVisited: "Places visited"
         }
     }
 
@@ -31,6 +35,8 @@ enum TrendMetric: String, CaseIterable, Identifiable, Hashable {
         case .sleep: "Hours"
         case .steps: "Steps"
         case .temperature: "°F"
+        case .activeMinutes: "min"
+        case .placesVisited: "Places"
         }
     }
 
@@ -43,6 +49,8 @@ enum TrendMetric: String, CaseIterable, Identifiable, Hashable {
         case .sleep: "Daily hours"
         case .steps: "Daily total"
         case .temperature: "Daily average (°F)"
+        case .activeMinutes: "Daily active minutes"
+        case .placesVisited: "Distinct places per day"
         }
     }
 }
@@ -132,6 +140,9 @@ enum JournalMath {
             let lat = entry.latitude.map { String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), $0) } ?? ""
             let lon = entry.longitude.map { String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), $0) } ?? ""
             var line = "\(lat), \(lon)"
+            if let place = trimmed(entry.placeName) {
+                line = "\(place) · \(line)"
+            }
             if let altitude = entry.altitude {
                 line += " · \(formatNumber(altitude)) m elevation"
             }
@@ -232,6 +243,25 @@ enum JournalMath {
                 parts.append(dose)
             }
             return parts.joined(separator: " · ")
+        case .visit:
+            let place = trimmed(entry.placeName)
+            if entry.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "departure" {
+                var line = place.map { "Left \($0)" } ?? "Left"
+                if let minutes = entry.durationMinutes, minutes.isFinite {
+                    line += " · \(formatMinutes(minutes))"
+                }
+                return line
+            }
+            if let place {
+                return "Arrived at \(place)"
+            }
+            return "Arrived"
+        case .activity:
+            let name = activityLabel(entry.kind)
+            if let minutes = entry.durationMinutes, minutes.isFinite {
+                return "\(name) · \(formatMinutes(minutes))"
+            }
+            return name
         }
     }
 
@@ -380,6 +410,52 @@ enum JournalMath {
                 let average = readings.reduce(0, +) / Double(readings.count)
                 return fahrenheit(celsius: average)
             }
+        case .activeMinutes:
+            let rows = entries.filter { entry in
+                guard entry.entryType == .activity else { return false }
+                switch entry.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                case "walking", "running", "cycling":
+                    return (entry.durationMinutes ?? 0) > 0
+                default:
+                    return false
+                }
+            }
+            return counted(
+                metric: metric,
+                dayCount: count,
+                days: days,
+                domainStart: start,
+                domainEnd: end,
+                emptyMessage: emptyMessage,
+                hasAny: rows.contains { daySet(days, calendar: calendar).contains(calendar.startOfDay(for: $0.occurredAt)) },
+                value: { day in
+                    rows.filter { calendar.isDate($0.occurredAt, inSameDayAs: day) }
+                        .reduce(0) { $0 + ($1.durationMinutes ?? 0) }
+                },
+                includeEmptyDays: true
+            )
+        case .placesVisited:
+            let rows = entries.filter { entry in
+                guard entry.entryType == .visit else { return false }
+                guard entry.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "arrival" else { return false }
+                return trimmed(entry.placeName) != nil
+            }
+            return counted(
+                metric: metric,
+                dayCount: count,
+                days: days,
+                domainStart: start,
+                domainEnd: end,
+                emptyMessage: emptyMessage,
+                hasAny: rows.contains { daySet(days, calendar: calendar).contains(calendar.startOfDay(for: $0.occurredAt)) },
+                value: { day in
+                    let names = rows.filter { calendar.isDate($0.occurredAt, inSameDayAs: day) }.compactMap { entry -> String? in
+                        trimmed(entry.placeName)?.lowercased()
+                    }
+                    return Double(Set(names).count)
+                },
+                includeEmptyDays: true
+            )
         }
     }
 
@@ -447,7 +523,7 @@ enum JournalMath {
     private static func isRainy(_ condition: String?) -> Bool {
         guard let condition else { return false }
         let value = condition.lowercased()
-        return value.contains("rain") || value.contains("drizzle") || value.contains("thunder")
+        return value.contains("rain") || value.contains("drizzle") || value.contains("thunder") || value.contains("shower") || value.contains("storm")
     }
 
     private static func feelingLabel(_ entry: JournalEntry) -> String {
@@ -522,6 +598,8 @@ enum JournalMath {
         case .sleep: "sleep"
         case .steps: "step totals"
         case .temperature: "temperatures"
+        case .activeMinutes: "active minutes"
+        case .placesVisited: "places visited"
         }
     }
 
@@ -620,6 +698,8 @@ enum JournalMath {
             (entry.emotions ?? []).joined(separator: ", "),
             entry.condition ?? "",
             entry.servingSize ?? "",
+            entry.placeName ?? "",
+            entry.entryType == .activity ? activityLabel(entry.kind) : "",
         ]
         if let amount = entry.amountMl {
             parts.append("\(formatNumber(amount))")
@@ -662,6 +742,10 @@ enum JournalMath {
             parts.append(String(celsius))
             parts.append(formatFahrenheit(celsius))
         }
+        if let minutes = entry.durationMinutes {
+            parts.append(formatNumber(minutes))
+            parts.append(formatMinutes(minutes))
+        }
         for value in [entry.calories, entry.totalFat, entry.saturatedFat, entry.cholesterol, entry.sodium, entry.carbohydrates, entry.fiber, entry.sugar, entry.protein] {
             if let value {
                 parts.append(formatNumber(value))
@@ -671,6 +755,40 @@ enum JournalMath {
             .map { $0.lowercased() }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    private static func activityLabel(_ kind: String?) -> String {
+        switch trimmed(kind)?.lowercased() {
+        case "automotive":
+            return "Driving"
+        case "walking":
+            return "Walking"
+        case "running":
+            return "Running"
+        case "cycling":
+            return "Cycling"
+        case "stationary":
+            return "Stationary"
+        case "unknown":
+            return "Unknown"
+        case let other? where !other.isEmpty:
+            let rest = other.dropFirst()
+            return other.prefix(1).uppercased() + rest
+        default:
+            return "Activity"
+        }
+    }
+
+    private static func formatMinutes(_ minutes: Double) -> String {
+        let rounded = minutes.rounded()
+        let text = rounded.isFinite ? formatNumber(rounded) : "0"
+        return "\(text) min"
     }
 
     private static func formatNumber(_ value: Double) -> String {

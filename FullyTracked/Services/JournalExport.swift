@@ -97,7 +97,21 @@ enum JournalExporter {
             put(&object, "substanceName", entry.substanceName)
             put(&object, "amount", entry.doseAmount)
             put(&object, "unit", entry.doseUnit)
+        case .visit:
+            put(&object, "latitude", entry.latitude)
+            put(&object, "longitude", entry.longitude)
+            put(&object, "accuracyMeters", entry.accuracyMeters)
+            put(&object, "altitude", entry.altitude)
+            put(&object, "source", entry.source)
+            put(&object, "kind", entry.kind)
+        case .activity:
+            put(&object, "kind", entry.kind)
+            put(&object, "source", entry.source)
         }
+        put(&object, "durationMinutes", entry.durationMinutes)
+        put(&object, "placeName", entry.placeName)
+        put(&object, "batteryLevel", entry.batteryLevel)
+        put(&object, "lowPowerMode", entry.lowPowerMode)
         return object
     }
 

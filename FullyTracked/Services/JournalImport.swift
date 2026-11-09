@@ -84,6 +84,8 @@ enum JournalImporter {
         case "sleep": .sleep
         case "steps": .steps
         case "dose": .dose
+        case "visit": .visit
+        case "activity": .activity
         default: nil
         }
     }
@@ -153,12 +155,18 @@ enum JournalImporter {
         entry.fiber = doubleValue(fields["fiber"])
         entry.sugar = doubleValue(fields["sugar"])
         entry.protein = doubleValue(fields["protein"])
+        entry.durationMinutes = doubleValue(fields["durationMinutes"])
+        entry.placeName = stringValue(fields["placeName"])
+        entry.batteryLevel = doubleValue(fields["batteryLevel"])
+        if fields["lowPowerMode"] != nil {
+            entry.lowPowerMode = boolValue(fields["lowPowerMode"])
+        }
         if let foods = fields["foods"] as? [Any],
            let data = try? JSONSerialization.data(withJSONObject: foods, options: [.sortedKeys]),
            let text = String(data: data, encoding: .utf8) {
             entry.foodsJSON = text
         }
-        if typeName != "location" {
+        if typeName != "location" && typeName != "visit" {
             entry.latitude = nil
             entry.longitude = nil
             entry.accuracyMeters = nil
@@ -237,6 +245,12 @@ enum JournalImporter {
         putNumber("sugar", entry.sugar)
         putNumber("protein", entry.protein)
         put("foods", entry.foodsJSON)
+        putNumber("durationMinutes", entry.durationMinutes)
+        put("placeName", entry.placeName)
+        putNumber("batteryLevel", entry.batteryLevel)
+        if let lowPower = entry.lowPowerMode {
+            put("lowPowerMode", lowPower ? "true" : "false")
+        }
         return fields.keys.sorted().map { "\($0)=\(fields[$0] ?? "")" }.joined(separator: "\n")
     }
 

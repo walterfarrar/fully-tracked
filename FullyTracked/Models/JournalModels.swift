@@ -3,6 +3,8 @@ import SwiftData
 
 enum EntryType: String, Codable, CaseIterable, Identifiable, Hashable {
     case location
+    case visit
+    case activity
     case meal
     case hydration
     case bathroom
@@ -17,6 +19,8 @@ enum EntryType: String, Codable, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .location: "Location"
+        case .visit: "Visit"
+        case .activity: "Activity"
         case .meal: "Meal"
         case .hydration: "Hydration"
         case .bathroom: "Bathroom"
@@ -76,6 +80,12 @@ final class JournalEntry {
     var doseAmount: Double? = nil
     var doseUnit: String? = nil
 
+    /// Optional so an existing store can migrate without a custom mapping.
+    var durationMinutes: Double? = nil
+    var placeName: String? = nil
+    var batteryLevel: Double? = nil
+    var lowPowerMode: Bool? = nil
+
     var servingSize: String?
     var calories: Double?
     var totalFat: Double?
@@ -97,6 +107,21 @@ final class JournalEntry {
     var entryType: EntryType {
         get { EntryType(rawValue: typeRaw) ?? .meal }
         set { typeRaw = newValue.rawValue }
+    }
+}
+
+@Model
+final class PlaceCacheEntry {
+    var latKey: String
+    var lonKey: String
+    var name: String
+    var savedAt: Date
+
+    init(latKey: String, lonKey: String, name: String, savedAt: Date = Date()) {
+        self.latKey = latKey
+        self.lonKey = lonKey
+        self.name = name
+        self.savedAt = savedAt
     }
 }
 

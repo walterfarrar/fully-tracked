@@ -77,12 +77,25 @@ struct MoodForm: View {
         entry.moodScore = score
         let names = ordered.map(\.name).filter { picked.contains($0) }
         entry.emotions = names.isEmpty ? nil : names
+        let entryID = entry.id
+        let when = entry.occurredAt
+        let savedScore = score
+        let savedEmotions = entry.emotions ?? []
         do {
             try JournalSave.commit(entry, in: context)
-            dismiss()
         } catch {
             self.error = "The entry could not be saved."
+            return
         }
+        Task {
+            await HealthWriter.writeMood(
+                entryID: entryID,
+                occurredAt: when,
+                score: savedScore,
+                emotions: savedEmotions
+            )
+        }
+        dismiss()
     }
 }
 

@@ -295,12 +295,27 @@ struct MealForm: View {
             entry.sugar = facts.sugar
             entry.protein = facts.protein
         }
+        let entryID = entry.id
+        let when = entry.occurredAt
+        let nutrition = HealthWriter.MealNutrition(
+            calories: entry.calories,
+            protein: entry.protein,
+            carbohydrates: entry.carbohydrates,
+            totalFat: entry.totalFat,
+            sugar: entry.sugar,
+            sodium: entry.sodium,
+            fiber: entry.fiber
+        )
         do {
             try JournalSave.commit(entry, in: context)
-            dismiss()
         } catch {
             self.error = "The entry could not be saved."
+            return
         }
+        Task {
+            await HealthWriter.writeMeal(entryID: entryID, occurredAt: when, nutrition: nutrition)
+        }
+        dismiss()
     }
 
     private func nutritionNumbers() throws -> NutritionNumbers {
