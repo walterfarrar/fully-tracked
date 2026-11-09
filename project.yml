@@ -28,6 +28,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.fullyversed.fullytracked
         PRODUCT_NAME: FullyTracked
         GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: FullyTracked/Info.plist
         SWIFT_VERSION: "5.0"
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
@@ -44,6 +45,7 @@ targets:
       path: FullyTracked/Info.plist
       properties:
         CFBundleDisplayName: Fully Tracked
+        CFBundleIconName: AppIcon
         CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
         CFBundleExecutable: $(EXECUTABLE_NAME)
         CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
