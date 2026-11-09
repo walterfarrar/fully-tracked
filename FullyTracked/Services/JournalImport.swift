@@ -94,6 +94,9 @@ enum JournalImporter {
         entry.accuracyMeters = doubleValue(fields["accuracyMeters"])
         entry.altitude = doubleValue(fields["altitude"])
         entry.source = stringValue(fields["source"])
+        entry.weatherObservedAt = dateValue(fields["weatherObservedAt"])
+        entry.temperatureCelsius = doubleValue(fields["temperatureCelsius"])
+        entry.condition = stringValue(fields["condition"])
         entry.descriptionText = stringValue(fields["description"])
         entry.drinkName = stringValue(fields["drinkName"])
         entry.amountLabel = stringValue(fields["amountLabel"])
@@ -181,6 +184,11 @@ enum JournalImporter {
         putNumber("accuracyMeters", entry.accuracyMeters)
         putNumber("altitude", entry.altitude)
         put("source", entry.source)
+        putNumber("temperatureCelsius", entry.temperatureCelsius)
+        put("condition", entry.condition)
+        if let observed = entry.weatherObservedAt {
+            put("weatherObservedAt", String(Int((observed.timeIntervalSince1970 * 1000).rounded())))
+        }
         put("description", entry.descriptionText)
         put("drinkName", entry.drinkName)
         put("amountLabel", entry.amountLabel)

@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum EntryType: String, Codable, CaseIterable, Identifiable {
+enum EntryType: String, Codable, CaseIterable, Identifiable, Hashable {
     case location
     case meal
     case hydration
@@ -18,7 +18,7 @@ enum EntryType: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .location: "Location"
         case .meal: "Meal"
-        case .hydration: "Drink"
+        case .hydration: "Hydration"
         case .bathroom: "Bathroom"
         case .lifeEvent: "Life event"
         case .mood: "Mood"
@@ -133,25 +133,95 @@ final class StrengthScaleSetting {
 
 enum JournalSeed {
     static func seed(_ context: ModelContext) {
-        let drinks = (try? context.fetch(FetchDescriptor<Drink>())) ?? []
+        seedDrinks(context)
+        seedStrength(context)
+        seedFoods(context)
+        seedHydration(context)
+        seedEvents(context)
+        seedEmotions(context)
+        try? context.save()
+    }
+
+    private static func seedDrinks(_ context: ModelContext) {
+        guard let drinks = try? context.fetch(FetchDescriptor<Drink>()) else { return }
         if drinks.isEmpty {
-            for name in ["water", "coffee", "soda"] {
+            for name in JournalCatalog.starterDrinks {
                 context.insert(Drink(name: name))
             }
+            return
         }
+        let legacy = Set(["water", "coffee", "soda"])
+        guard Set(drinks.map(\.name)) == legacy else { return }
+        for drink in drinks {
+            switch drink.name {
+            case "water": drink.name = "Water"
+            case "coffee": drink.name = "Coffee"
+            case "soda": drink.name = "Soda"
+            default: break
+            }
+        }
+    }
 
-        let levels = (try? context.fetch(FetchDescriptor<StrengthLevel>())) ?? []
-        if levels.isEmpty {
+    private static func seedStrength(_ context: ModelContext) {
+        if let levels = try? context.fetch(FetchDescriptor<StrengthLevel>()), levels.isEmpty {
             for (index, label) in ["light", "medium", "strong"].enumerated() {
                 context.insert(StrengthLevel(label: label, sortIndex: index))
             }
         }
-
-        let scales = (try? context.fetch(FetchDescriptor<StrengthScaleSetting>())) ?? []
-        if scales.isEmpty {
+        if let scales = try? context.fetch(FetchDescriptor<StrengthScaleSetting>()), scales.isEmpty {
             context.insert(StrengthScaleSetting(usesNumbers: false))
         }
+    }
 
-        try? context.save()
+    private static func seedFoods(_ context: ModelContext) {
+        seedOnce(context, key: "fully-tracked-seeded-foods", FoodItem.self) {
+            for (index, name) in JournalCatalog.legacyFoods.enumerated() {
+                context.insert(FoodItem(name: name, sortIndex: index))
+            }
+        }
+    }
+
+    private static func seedHydration(_ context: ModelContext) {
+        seedOnce(context, key: "fully-tracked-seeded-hydration", HydrationAmount.self) {
+            for (index, item) in JournalCatalog.starterHydration.enumerated() {
+                context.insert(HydrationAmount(label: item.label, ounces: item.ounces, sortIndex: index))
+            }
+        }
+    }
+
+    private static func seedEvents(_ context: ModelContext) {
+        guard let events = try? context.fetch(FetchDescriptor<EventType>()) else { return }
+        guard events.isEmpty else { return }
+        for (index, name) in JournalCatalog.starterEvents.enumerated() {
+            context.insert(EventType(name: name, sortIndex: index))
+        }
+    }
+
+    private static func seedEmotions(_ context: ModelContext) {
+        guard let emotions = try? context.fetch(FetchDescriptor<Emotion>()) else { return }
+        guard emotions.isEmpty else { return }
+        for (index, name) in JournalCatalog.moodTags.enumerated() {
+            context.insert(Emotion(name: name, sortIndex: index))
+        }
+    }
+
+    /// Seeds a catalog once. Later deletions stay deleted.
+    private static func seedOnce<Model: PersistentModel>(
+        _ context: ModelContext,
+        key: String,
+        _: Model.Type,
+        insert: () -> Void
+    ) {
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        guard let rows = try? context.fetch(FetchDescriptor<Model>()) else { return }
+        if rows.isEmpty {
+            insert()
+            do {
+                try context.save()
+            } catch {
+                return
+            }
+        }
+        UserDefaults.standard.set(true, forKey: key)
     }
 }

@@ -17,17 +17,31 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
 
     @Published private(set) var statusLine = "Location is on. Check-ins are saved on the interval, including while the app is not on screen."
     @Published private(set) var lastEvent = ""
+    @Published private(set) var checkingIn = false
+    @Published private(set) var trackingEnabled: Bool
 
     private let manager = CLLocationManager()
     private var container: ModelContainer?
     private var configured = false
     private var lastAcceptedAt: Date?
-    private let intervalKey = "locationIntervalMinutes"
+    private var manualCheckIn = false
+    private static let intervalKey = "locationIntervalMinutes"
+    private static let enabledKey = "locationTrackingEnabled"
 
     var intervalMinutes: Int {
-        guard UserDefaults.standard.object(forKey: intervalKey) != nil else { return 30 }
-        let stored = UserDefaults.standard.integer(forKey: intervalKey)
-        return min(10_080, max(5, stored))
+        guard UserDefaults.standard.object(forKey: Self.intervalKey) != nil else { return 30 }
+        let stored = UserDefaults.standard.integer(forKey: Self.intervalKey)
+        return min(10_080, max(1, stored))
+    }
+
+    override init() {
+        if UserDefaults.standard.object(forKey: Self.enabledKey) == nil {
+            trackingEnabled = true
+        } else {
+            trackingEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+        }
+        super.init()
+        publishStatus()
     }
 
     func attach(_ container: ModelContainer) {
@@ -35,9 +49,45 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
     }
 
     func setInterval(minutes: Int) {
-        let clamped = min(10_080, max(5, minutes))
-        UserDefaults.standard.set(clamped, forKey: intervalKey)
+        let clamped = min(10_080, max(1, minutes))
+        UserDefaults.standard.set(clamped, forKey: Self.intervalKey)
         publishStatus()
+    }
+
+    func setTrackingEnabled(_ enabled: Bool) {
+        trackingEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
+        if !configured {
+            start()
+            return
+        }
+        if enabled {
+            apply(manager.authorizationStatus)
+        } else {
+            manager.stopUpdatingLocation()
+            publishStatus()
+        }
+    }
+
+    /// One reading, saved even when the interval has not elapsed.
+    func checkInNow() {
+        if !configured {
+            start()
+        }
+        checkingIn = true
+        manualCheckIn = true
+        lastEvent = ""
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestAlwaysAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            manager.requestLocation()
+        case .denied, .restricted:
+            finishManual(message: "Location was not recorded.")
+        @unknown default:
+            finishManual(message: "Location was not recorded.")
+        }
     }
 
     func start() {
@@ -50,6 +100,10 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             manager.pausesLocationUpdatesAutomatically = false
             manager.showsBackgroundLocationIndicator = true
             manager.allowsBackgroundLocationUpdates = true
+        }
+        guard trackingEnabled else {
+            publishStatus()
+            return
         }
         apply(manager.authorizationStatus)
     }
@@ -77,13 +131,18 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             )
         }
         Task { @MainActor in
-            self.consume(fixes)
+            let manual = self.manualCheckIn
+            self.consume(fixes, manual: manual)
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         let message = error.localizedDescription
         Task { @MainActor in
+            if self.manualCheckIn {
+                self.finishManual(message: "Location was not recorded.")
+                return
+            }
             self.lastEvent = "Location could not be read. \(message) No check-in was invented."
         }
     }
@@ -92,33 +151,100 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
         switch status {
         case .notDetermined:
             manager.requestAlwaysAuthorization()
-            publishStatus()
+            if !manualCheckIn {
+                publishStatus()
+            }
         case .authorizedAlways:
-            manager.startUpdatingLocation()
-            publishStatus()
+            if trackingEnabled {
+                manager.startUpdatingLocation()
+                if !manualCheckIn {
+                    publishStatus()
+                }
+            } else {
+                manager.stopUpdatingLocation()
+                if !manualCheckIn {
+                    publishStatus()
+                }
+            }
+            if manualCheckIn {
+                manager.requestLocation()
+            }
         case .authorizedWhenInUse:
-            manager.startUpdatingLocation()
+            if trackingEnabled {
+                manager.startUpdatingLocation()
+            } else {
+                manager.stopUpdatingLocation()
+            }
             manager.requestAlwaysAuthorization()
-            statusLine = "Always location is still needed for check-ins while the app is not on screen."
+            if !manualCheckIn {
+                statusLine = "Always location is still needed for check-ins while the app is not on screen."
+            }
+            if manualCheckIn {
+                manager.requestLocation()
+            }
         case .denied, .restricted:
+            manager.stopUpdatingLocation()
+            if manualCheckIn {
+                finishManual(message: "Location was not recorded.")
+            }
             statusLine = "Location is not allowed. Allow Always location so check-ins can be saved while the app is not on screen."
         @unknown default:
-            publishStatus()
+            if !manualCheckIn {
+                publishStatus()
+            }
         }
     }
 
     private func publishStatus() {
+        if !trackingEnabled {
+            statusLine = "Location check-ins are off. A one-time check-in still saves when you ask."
+            return
+        }
         statusLine = "Location is on. A check-in is saved every \(intervalMinutes) minutes, including while the app is not on screen."
     }
 
-    /// Updates may arrive often. Only one check-in is stored per interval.
-    private func consume(_ fixes: [LocationFix]) {
-        guard let fix = fixes.last else { return }
+    private func finishManual(message: String) {
+        manualCheckIn = false
+        checkingIn = false
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        lastEvent = message
+    }
+
+    /// Updates may arrive often. Only one automatic check-in is stored per interval.
+    /// A manual check-in ignores that gap.
+    private func consume(_ fixes: [LocationFix], manual: Bool) {
+        guard let fix = fixes.last else {
+            if manual {
+                finishManual(message: "Location was not recorded.")
+            }
+            return
+        }
         let age = Date().timeIntervalSince(fix.timestamp)
-        guard fix.accuracy >= 0, age >= -60, age < 5 * 60 else { return }
-        guard fix.latitude >= -90, fix.latitude <= 90, fix.longitude >= -180, fix.longitude <= 180 else { return }
-        guard shouldRecord(at: Date()) else { return }
-        guard let context = container?.mainContext else { return }
+        let coordinatesOK = fix.latitude >= -90 && fix.latitude <= 90 && fix.longitude >= -180 && fix.longitude <= 180
+        let fresh = fix.accuracy >= 0 && age >= -60 && age < 5 * 60 && coordinatesOK
+        guard fresh else {
+            if manual {
+                let message = fix.accuracy < 0
+                    ? "The device returned a reading without a usable accuracy, so it was not saved."
+                    : "Location was not recorded."
+                finishManual(message: message)
+            }
+            return
+        }
+        if !manual && !shouldRecord(at: Date()) {
+            return
+        }
+        if manual {
+            manualCheckIn = false
+            checkingIn = false
+            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        }
+        guard let context = container?.mainContext else {
+            if manual {
+                lastEvent = "The check-in could not be saved. No substitute reading was stored."
+            }
+            return
+        }
 
         let previous = lastAcceptedAt
         lastAcceptedAt = Date()
@@ -136,6 +262,10 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             context.delete(entry)
             lastEvent = "The check-in could not be saved. No substitute reading was stored."
             return
+        }
+
+        if manual {
+            lastEvent = "Location recorded."
         }
 
         let entryID = entry.id

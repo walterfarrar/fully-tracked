@@ -1,0 +1,96 @@
+# FullyTracked is a native SwiftUI app (no Flutter). The .xcodeproj is not
+# committed; ci/generate-xcodeproj.sh builds it from project.yml with XcodeGen.
+# Same team conventions as the other Fully Versed apps: mac_mini_m2, the
+# "Codemagic" App Store Connect integration, email on every result, and
+# TestFlight upload to the App Store Connect Users group.
+
+workflows:
+  ios-verify:
+    # Fast unsigned compile on every push. Nobody can build Swift locally on
+    # Windows, so this is the compile check. Delete this workflow if build
+    # minutes matter more than the early signal.
+    name: iOS Verify Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: "*"
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Generate Xcode project
+        script: |
+          bash ci/generate-xcodeproj.sh
+      - name: Build (unsigned, generic iOS device)
+        script: |
+          set -euo pipefail
+          mkdir -p build/logs
+          xcodebuild build \
+            -project FullyTracked.xcodeproj \
+            -scheme FullyTracked \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee build/logs/ios-verify-build.log
+    artifacts:
+      - build/logs/*.log
+    publishing:
+      email:
+        recipients:
+          - walter.farrar0@gmail.com
+        notify:
+          success: false
+          failure: true
+
+  ios-testflight:
+    name: iOS TestFlight Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: Codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.fullyversed.fullytracked
+      xcode: latest
+      vars:
+        BUNDLE_ID: "com.fullyversed.fullytracked"
+    scripts:
+      - name: Generate Xcode project
+        script: |
+          bash ci/generate-xcodeproj.sh
+      - name: Set build number
+        script: |
+          # project.yml sets VERSIONING_SYSTEM apple-generic so agvtool works.
+          agvtool new-version -all "$PROJECT_BUILD_NUMBER"
+      - name: Set up provisioning profiles
+        script: |
+          xcode-project use-profiles --project FullyTracked.xcodeproj
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --project "FullyTracked.xcodeproj" \
+            --scheme "FullyTracked"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/xcarchive/**/*.dSYM
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - walter.farrar0@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - App Store Connect Users

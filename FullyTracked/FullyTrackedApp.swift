@@ -13,6 +13,11 @@ struct FullyTrackedApp: App {
             Drink.self,
             StrengthLevel.self,
             StrengthScaleSetting.self,
+            FoodItem.self,
+            HydrationAmount.self,
+            EventType.self,
+            Emotion.self,
+            Substance.self,
         ])
         let configuration = ModelConfiguration(
             schema: schema,
@@ -33,7 +38,7 @@ struct FullyTrackedApp: App {
             RootView()
                 .environmentObject(LocationTracker.shared)
                 .environmentObject(HealthSteps.shared)
-                .preferredColorScheme(.light)
+                .preferredColorScheme(.dark)
         }
         .modelContainer(container)
     }
@@ -44,6 +49,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        Theme.applyChrome()
         LocationTracker.shared.start()
         HealthSteps.shared.start()
         return true

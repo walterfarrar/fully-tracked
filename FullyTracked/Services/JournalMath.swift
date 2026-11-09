@@ -1,6 +1,6 @@
 import Foundation
 
-enum TrendMetric: String, CaseIterable, Identifiable {
+enum TrendMetric: String, CaseIterable, Identifiable, Hashable {
     case hydration
     case coffee
     case meals
@@ -33,6 +33,18 @@ enum TrendMetric: String, CaseIterable, Identifiable {
         case .temperature: "°F"
         }
     }
+
+    var detail: String {
+        switch self {
+        case .hydration: "Daily total (ml)"
+        case .coffee: "Daily total (ml)"
+        case .meals: "Daily count"
+        case .mood: "Daily average (1–10)"
+        case .sleep: "Daily hours"
+        case .steps: "Daily total"
+        case .temperature: "Daily average (°F)"
+        }
+    }
 }
 
 enum TrendKind {
@@ -62,7 +74,7 @@ struct TrendSeries {
     let yDomain: ClosedRange<Double>?
 }
 
-enum ComparisonKind: String, CaseIterable, Identifiable {
+enum ComparisonKind: String, CaseIterable, Identifiable, Hashable {
     case meals
     case rain
 
@@ -178,7 +190,11 @@ enum JournalMath {
             }
             return line
         case .lifeEvent:
-            return entry.title ?? ""
+            var line = entry.title ?? ""
+            if let description = entry.descriptionText, !description.isEmpty {
+                line += line.isEmpty ? description : " · \(description)"
+            }
+            return line
         case .mood:
             var line = entry.moodScore.map(String.init) ?? ""
             if let emotions = entry.emotions, !emotions.isEmpty {
@@ -190,10 +206,14 @@ enum JournalMath {
             }
             return line
         case .sleep:
+            var line = ""
             if let hours = entry.sleepHours {
-                return "\(formatNumber(hours)) hours"
+                line = "\(formatNumber(hours)) hours"
             }
-            return ""
+            if let note = entry.note, !note.isEmpty {
+                line += line.isEmpty ? note : " · \(note)"
+            }
+            return line
         case .steps:
             if let count = entry.stepCount {
                 return "\(count) steps"
@@ -245,8 +265,7 @@ enum JournalMath {
                 hasAny: rows.contains { daySet(days, calendar: calendar).contains(calendar.startOfDay(for: $0.occurredAt)) },
                 value: { day in
                     rows.filter { calendar.isDate($0.occurredAt, inSameDayAs: day) }
-                        .compactMap(\.amountMl)
-                        .reduce(0, +)
+                        .reduce(0) { $0 + milliliters($1) }
                 },
                 includeEmptyDays: true
             )
@@ -273,7 +292,7 @@ enum JournalMath {
                 var totals: [String: Double] = [:]
                 for row in todays {
                     let label = strengthLabel(row.strength)
-                    totals[label, default: 0] += row.amountMl ?? 0
+                    totals[label, default: 0] += milliliters(row)
                 }
                 for (label, ml) in totals where ml > 0 {
                     points.append(TrendPoint(day: day, value: ml, strength: label))
@@ -298,7 +317,7 @@ enum JournalMath {
                 domainStart: start,
                 domainEnd: end,
                 emptyMessage: emptyMessage,
-                yDomain: 1...5
+                yDomain: 1...10
             ) { day in
                 let scores = entries.filter {
                     $0.entryType == .mood && calendar.isDate($0.occurredAt, inSameDayAs: day)
@@ -376,15 +395,15 @@ enum JournalMath {
     private static func mealMoodSentence(_ entries: [JournalEntry]) -> String {
         let meals = entries.filter { $0.entryType == .meal }
         let moods = entries.filter {
-            $0.entryType == .mood && (1...2).contains($0.moodScore ?? 0)
+            $0.entryType == .mood && (1...4).contains($0.moodScore ?? 0)
         }
         var counts: [String: Int] = [:]
         for mood in moods {
-            let feeling = feelingLabel(mood.note)
+            let feeling = feelingLabel(mood)
             let windowStart = mood.occurredAt.addingTimeInterval(-4 * 60 * 60)
             var words = Set<String>()
             for meal in meals where meal.occurredAt >= windowStart && meal.occurredAt <= mood.occurredAt {
-                words.formUnion(significantWords(in: meal.descriptionText ?? ""))
+                words.formUnion(significantWords(in: mealText(meal)))
             }
             for word in words {
                 counts["\(feeling)\t\(word)", default: 0] += 1
@@ -411,7 +430,7 @@ enum JournalMath {
             return calendar.startOfDay(for: entry.occurredAt)
         })
         let moods = entries.filter { entry in
-            guard entry.entryType == .mood, let score = entry.moodScore, (1...5).contains(score) else {
+            guard entry.entryType == .mood, let score = entry.moodScore, (1...10).contains(score) else {
                 return false
             }
             return rainyDays.contains(calendar.startOfDay(for: entry.occurredAt))
@@ -431,10 +450,42 @@ enum JournalMath {
         return value.contains("rain") || value.contains("drizzle") || value.contains("thunder")
     }
 
-    private static func feelingLabel(_ note: String?) -> String {
-        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if trimmed.isEmpty || trimmed.count > 80 { return "a low mood" }
-        return trimmed
+    private static func feelingLabel(_ entry: JournalEntry) -> String {
+        let note = entry.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !note.isEmpty && note.count <= 80 { return note }
+        if let emotions = entry.emotions?
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .filter({ !$0.isEmpty }),
+           !emotions.isEmpty {
+            let joined = emotions.joined(separator: ", ")
+            if joined.count <= 80 { return joined }
+        }
+        return "a low mood"
+    }
+
+    private static func mealText(_ entry: JournalEntry) -> String {
+        var parts: [String] = [entry.descriptionText ?? ""]
+        if let foodsJSON = entry.foodsJSON,
+           let data = foodsJSON.data(using: .utf8),
+           let foods = try? JSONSerialization.jsonObject(with: data) as? [Any] {
+            for food in foods {
+                if let name = food as? String {
+                    parts.append(name)
+                } else if let object = food as? [String: Any], let name = object["name"] as? String {
+                    parts.append(name)
+                }
+            }
+        }
+        if let amountHad = entry.amountHad {
+            parts.append(amountHad)
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private static func milliliters(_ entry: JournalEntry) -> Double {
+        if let amountMl = entry.amountMl { return amountMl }
+        if let ounces = entry.amountOz { return ounces * 29.5735295625 }
+        return 0
     }
 
     private static func significantWords(in text: String) -> Set<String> {

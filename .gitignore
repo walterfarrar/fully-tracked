@@ -53,3 +53,8 @@ data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Xcode local build data
+xcuserdata/
+DerivedData/
+.build/

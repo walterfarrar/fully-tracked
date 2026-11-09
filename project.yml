@@ -1,0 +1,65 @@
+name: FullyTracked
+options:
+  bundleIdPrefix: com.fullyversed
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    VERSIONING_SYSTEM: apple-generic
+targets:
+  FullyTracked:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: FullyTracked
+        excludes:
+          - Info.plist
+          - FullyTracked.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fullyversed.fullytracked
+        PRODUCT_NAME: FullyTracked
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: FullyTracked/Info.plist
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        ENABLE_PREVIEWS: YES
+    entitlements:
+      path: FullyTracked/FullyTracked.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.background-delivery: true
+    info:
+      path: FullyTracked/Info.plist
+      properties:
+        CFBundleDisplayName: Fully Tracked
+        CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - location
+        NSLocationAlwaysAndWhenInUseUsageDescription: Fully Tracked saves location check-ins on this device, including while the app is not on screen.
+        NSLocationWhenInUseUsageDescription: Fully Tracked saves a location check-in on this device when you ask, and shows where you are on the map.
+        NSHealthShareUsageDescription: Fully Tracked reads daily step totals from Apple Health and stores them in the journal on this device.
+        NSHealthUpdateUsageDescription: Fully Tracked keeps the journal on this device and does not add samples to Apple Health.
+        NSCameraUsageDescription: Fully Tracked uses the camera to read a nutrition label. The photo is not saved.
+        NSPhotoLibraryUsageDescription: Fully Tracked reads a nutrition label from a photo you choose. The photo is not saved.
