@@ -119,7 +119,7 @@ struct LogView: View {
         if let filter {
             return "No \(filter.title) entries yet."
         }
-        return "Nothing here yet. Location check-ins, visits, and activity appear when tracking is on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand."
+        return "Nothing here yet. Location check-ins and activity appear when automatic check-ins are on. Meals, hydration, bathroom, life events, mood, and sleep can be added by hand."
     }
 
     private func dayTitle(_ day: Date) -> String {

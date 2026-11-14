@@ -288,7 +288,7 @@ final class HealthSync: ObservableObject {
                     )
                 }.value
                 if type.typeRaw == "stepCount" {
-                    return TypeSyncResult(failed: false, stepDays: storeStepJournal(sums))
+                    return TypeSyncResult(failed: false, stepDays: await storeStepJournal(sums))
                 }
                 return TypeSyncResult(failed: false, stepDays: 0)
             }
@@ -433,32 +433,18 @@ final class HealthSync: ObservableObject {
         }
     }
 
-    private func storeStepJournal(_ sums: [Date: Double]) -> Int {
-        guard let context = container?.mainContext else { return 0 }
+    private func storeStepJournal(_ sums: [Date: Double]) async -> Int {
+        guard let container else { return 0 }
         let days = sums.compactMap { day, value -> StepDay? in
             guard value.isFinite, value > 0 else { return nil }
             let count = Int(value.rounded())
             guard count > 0 else { return nil }
             return StepDay(day: HealthDay.start(of: day), count: count)
         }
-        let existing = ((try? context.fetch(FetchDescriptor<JournalEntry>())) ?? [])
-            .filter { $0.entryType == .steps && $0.source == "apple-health" }
-        let calendar = Calendar.current
-        for day in days {
-            if let match = existing.first(where: { calendar.isDate($0.occurredAt, inSameDayAs: day.day) }) {
-                match.stepCount = day.count
-                match.occurredAt = calendar.startOfDay(for: day.day)
-                match.savedAt = Date()
-                match.source = "apple-health"
-            } else {
-                let entry = JournalEntry(type: .steps, occurredAt: calendar.startOfDay(for: day.day))
-                entry.stepCount = day.count
-                entry.source = "apple-health"
-                context.insert(entry)
-            }
-        }
         do {
-            try context.save()
+            try await Task.detached(priority: .utility) {
+                try JournalBackgroundWriter.saveSteps(days, container: container)
+            }.value
             return days.count
         } catch {
             return 0

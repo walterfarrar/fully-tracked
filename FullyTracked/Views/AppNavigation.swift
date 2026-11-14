@@ -48,7 +48,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Equatable {
         case .hydration: "Hydration"
         case .food: "Food"
         case .medication: "Medication"
-        case .location: "Location"
+        case .location: "Check-ins"
         }
     }
 }

@@ -16,6 +16,9 @@ settings:
 targets:
   FullyTracked:
     type: application
+    scheme:
+      testTargets:
+        - FullyTrackedTests
     platform: iOS
     deploymentTarget: "18.0"
     sources:
@@ -61,10 +64,21 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - location
-        NSLocationAlwaysAndWhenInUseUsageDescription: Fully Tracked saves location check-ins, place visits, and significant location changes on this device, including while the app is not on screen. Nothing leaves the device.
-        NSLocationWhenInUseUsageDescription: Fully Tracked saves a location check-in on this device when you ask, and shows where you are on the map. Visits and significant changes stay on this device too. Nothing leaves the device.
-        NSMotionUsageDescription: Fully Tracked reads motion on this device to record trips and activity such as walking, cycling, and driving. Nothing leaves the device.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Fully Tracked saves a location check-in at your chosen interval on this device, including while the app is not on screen.
+        NSLocationWhenInUseUsageDescription: Fully Tracked saves a location check-in at your chosen interval or when you tap Check in now, and shows where you are on the map.
+        NSMotionUsageDescription: Fully Tracked reads motion on this device to record activity such as walking, cycling, and driving.
         NSHealthShareUsageDescription: Fully Tracked reads activity, heart, body, sleep, vitals, nutrition, hearing, workouts, and mood from Apple Health and stores them on this device.
         NSHealthUpdateUsageDescription: Fully Tracked can add water, caffeine, nutrition, sleep, and mood you log to Apple Health on this device.
         NSCameraUsageDescription: Fully Tracked uses the camera to read a nutrition label. The photo is not saved.
         NSPhotoLibraryUsageDescription: Fully Tracked reads a nutrition label from a photo you choose. The photo is not saved.
+  FullyTrackedTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FullyTrackedTests
+    dependencies:
+      - target: FullyTracked
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.fullyversed.fullytracked.tests

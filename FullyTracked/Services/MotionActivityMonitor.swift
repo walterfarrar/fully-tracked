@@ -1,4 +1,3 @@
-import CoreLocation
 import CoreMotion
 import Foundation
 import SwiftData
@@ -21,14 +20,10 @@ final class MotionActivityMonitor {
     private var openKind: String?
     private var openStartedAt: Date?
     private var lastQueryAt: Date?
-    private var tripActive = false
-    private var tripTask: Task<Void, Never>?
-    private var backgroundSession: CLBackgroundActivitySession?
-    private var lastTripLocation: CLLocation?
+    private var writeTask: Task<Void, Never>?
 
     private static let openKindKey = "fullyTracked.motion.openKind"
     private static let openStartKey = "fullyTracked.motion.openStart"
-    private static let tripSpacingMeters: CLLocationDistance = 150
 
     private init() {}
 
@@ -45,7 +40,6 @@ final class MotionActivityMonitor {
                 guard let activity else { return }
                 let sample = MotionSample(
                     kind: MotionNaming.kind(activity),
-                    confident: activity.confidence == .medium || activity.confidence == .high,
                     startedAt: activity.startDate
                 )
                 Task { @MainActor in
@@ -61,7 +55,6 @@ final class MotionActivityMonitor {
             motion.stopActivityUpdates()
             updatesStarted = false
         }
-        stopTrip()
     }
 
     /// Catches up on motion history after a foreground open or a background location wake.
@@ -82,7 +75,6 @@ final class MotionActivityMonitor {
             let samples = activities.map { activity in
                 MotionSample(
                     kind: MotionNaming.kind(activity),
-                    confident: activity.confidence == .medium || activity.confidence == .high,
                     startedAt: activity.startDate
                 )
             }
@@ -94,124 +86,51 @@ final class MotionActivityMonitor {
 
     private func ingest(_ samples: [MotionSample]) {
         let ordered = samples.sorted { $0.startedAt < $1.startedAt }
-        guard let last = ordered.last else { return }
-        for sample in ordered.dropLast() {
-            noteSegment(kind: sample.kind, startedAt: sample.startedAt)
-        }
-        noteSegment(kind: last.kind, startedAt: last.startedAt)
-        let travel = last.kind == "automotive" || last.kind == "cycling" || last.kind == "running"
-        if travel {
-            if last.confident {
-                startTrip()
+        guard !ordered.isEmpty else { return }
+        var drafts: [ActivityDraft] = []
+        for sample in ordered {
+            if let draft = noteSegment(kind: sample.kind, startedAt: sample.startedAt) {
+                drafts.append(draft)
             }
-        } else if last.kind == "stationary" || last.kind == "walking" {
-            stopTrip()
+        }
+        guard let container else { return }
+        let batch = drafts
+        let previous = writeTask
+        let kind = openKind
+        let startedAt = openStartedAt
+        writeTask = Task {
+            await previous?.value
+            do {
+                try await Task.detached(priority: .utility) {
+                    try JournalBackgroundWriter.saveActivities(batch, container: container)
+                }.value
+                // Advance the persisted replay cursor only after the batch saves.
+                if let kind, let startedAt {
+                    UserDefaults.standard.set(kind, forKey: Self.openKindKey)
+                    UserDefaults.standard.set(startedAt, forKey: Self.openStartKey)
+                }
+            } catch {
+                // Keep the previous cursor so a later launch can replay this batch.
+            }
         }
     }
 
-    private func noteSegment(kind: String, startedAt: Date) {
+    private func noteSegment(kind: String, startedAt: Date) -> ActivityDraft? {
         guard let currentKind = openKind, let currentStart = openStartedAt else {
             rememberOpen(kind: kind, startedAt: startedAt)
-            return
+            return nil
         }
         if currentKind == kind {
             if startedAt < currentStart {
                 rememberOpen(kind: kind, startedAt: startedAt)
             }
-            return
+            return nil
         }
         let endedAt = max(startedAt, currentStart)
         let minutes = endedAt.timeIntervalSince(currentStart) / 60
-        if minutes >= 2 {
-            saveActivity(kind: currentKind, startedAt: currentStart, durationMinutes: minutes)
-        }
         rememberOpen(kind: kind, startedAt: startedAt)
-    }
-
-    private func startTrip() {
-        guard !tripActive else { return }
-        guard LocationTracker.shared.canTrackInBackground else { return }
-        tripActive = true
-        if lastTripLocation == nil {
-            lastTripLocation = LocationTracker.shared.mostRecentLocation()
-        }
-        if backgroundSession == nil {
-            backgroundSession = CLBackgroundActivitySession()
-        }
-        tripTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            if Task.isCancelled { return }
-            let updates = CLLocationUpdate.liveUpdates(.otherNavigation)
-            do {
-                for try await update in updates {
-                    if Task.isCancelled { return }
-                    if update.authorizationDenied {
-                        break
-                    }
-                    let fix = update.location.map(LocationFix.init(location:))
-                    if self.handleTrip(fix, isStationary: update.isStationary) {
-                        break
-                    }
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                // A location failure ends this stream. A later wake can start another. Nothing is invented.
-            }
-            if !Task.isCancelled {
-                self.stopTrip()
-            }
-        }
-    }
-
-    /// Returns true when the live stream should stop.
-    private func handleTrip(_ fix: LocationFix?, isStationary: Bool) -> Bool {
-        if isStationary {
-            return true
-        }
-        guard let fix, fix.isRecordable() else { return false }
-        if let lastTripLocation {
-            let here = CLLocation(latitude: fix.latitude, longitude: fix.longitude)
-            if here.distance(from: lastTripLocation) < Self.tripSpacingMeters {
-                return false
-            }
-        }
-        guard LocationTracker.shared.recordTripFix(fix) else { return false }
-        lastTripLocation = CLLocation(latitude: fix.latitude, longitude: fix.longitude)
-        return false
-    }
-
-    private func stopTrip() {
-        let task = tripTask
-        tripActive = false
-        tripTask = nil
-        backgroundSession?.invalidate()
-        backgroundSession = nil
-        task?.cancel()
-    }
-
-    private func saveActivity(kind: String, startedAt: Date, durationMinutes: Double) {
-        guard durationMinutes >= 2, let context = container?.mainContext else { return }
-        if alreadySaved(kind: kind, startedAt: startedAt) { return }
-        let entry = JournalEntry(type: .activity, occurredAt: startedAt)
-        entry.kind = kind
-        entry.durationMinutes = durationMinutes
-        entry.source = "motion"
-        context.insert(entry)
-        do {
-            try context.save()
-        } catch {
-            context.delete(entry)
-        }
-    }
-
-    private func alreadySaved(kind: String, startedAt: Date) -> Bool {
-        guard let context = container?.mainContext else { return false }
-        let rows = (try? context.fetch(FetchDescriptor<JournalEntry>())) ?? []
-        return rows.contains { entry in
-            guard entry.entryType == .activity, entry.kind == kind else { return false }
-            return abs(entry.occurredAt.timeIntervalSince(startedAt)) < 2
-        }
+        guard minutes >= 2 else { return nil }
+        return ActivityDraft(kind: currentKind, startedAt: currentStart, durationMinutes: minutes)
     }
 
     private func loadOpenSegment() {
@@ -228,14 +147,11 @@ final class MotionActivityMonitor {
     private func rememberOpen(kind: String, startedAt: Date) {
         openKind = kind
         openStartedAt = startedAt
-        UserDefaults.standard.set(kind, forKey: Self.openKindKey)
-        UserDefaults.standard.set(startedAt, forKey: Self.openStartKey)
     }
 }
 
 private struct MotionSample: Sendable {
     var kind: String
-    var confident: Bool
     var startedAt: Date
 }
 

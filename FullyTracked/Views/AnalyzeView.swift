@@ -3,6 +3,7 @@ import SwiftData
 import SwiftUI
 
 struct AnalyzeView: View {
+    @Environment(AppNavigation.self) private var navigation
     @Query private var entries: [JournalEntry]
     @StateObject private var analyst = OnDeviceAnalyst()
     @State private var insightDays = 7
@@ -113,7 +114,8 @@ struct AnalyzeView: View {
             LegacyAnalyzeKeyWipe.run()
             analyst.refreshAvailability()
         }
-        .task(id: insightToken) {
+        .task(id: navigation.screen == .analyze ? insightToken : nil) {
+            guard navigation.screen == .analyze, !Task.isCancelled else { return }
             await loadInsight()
         }
     }

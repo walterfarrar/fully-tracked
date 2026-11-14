@@ -25,7 +25,7 @@ One search box matches type names and text fields across every entry, newest fir
 
 | Type | How it is logged | Fields |
 | --- | --- | --- |
-| Location | Automatic, from the browser Geolocation API | time, latitude, longitude, accuracy in meters, source `device` |
+| Check-in | Automatic at the chosen interval, or when you tap Check in now | time, latitude, longitude, accuracy in meters, source `device` |
 | Meal | Manual | time, what you ate |
 | Water | Manual | time, milliliters |
 | Bathroom | Manual | time, stool or urine, optional Bristol scale 1–7 for stool, optional note |
@@ -38,7 +38,17 @@ Every entry has a stable id, a type, when it happened (`occurredAt`), and when i
 
 ## Location
 
-Check-ins default to every 30 minutes. The interval cannot be shorter than 5 minutes, and the server refuses location saves closer together than that. This is not a second-by-second track.
+Location is the coordinate saved with a check-in, rather than a separate travel history. The native iOS app saves automatic location check-ins only after the chosen interval has elapsed, plus a one-time check-in when requested. It does not save trip routes or arrival/departure records. Motion activity summaries do not contain coordinates. Places visited are counted from the place names on check-ins.
+
+At each location check, the app compares the reading with the grid cell of the last saved check-in. A different cell is saved; the same cell is skipped until at least an hour has passed since that saved check-in. Skipping a save still advances the check timer, including across app restarts. The interval remains the minimum time between checks, so longer intervals can leave more than an hour between saves. Manual Check in now bypasses these limits. The map and save policy use the same grid boundaries. GPS drift across a boundary can still produce extra saves.
+
+On the first launch of the updated iOS app, a one-time cleanup deletes old trip points and arrival/departure records, along with cached place coordinates that no remaining entry needs. Interval check-ins (including those triggered by significant changes), manual check-ins, and other journal entries are preserved. Failed cleanups retry on the next launch.
+
+On iOS, Always location access and background location updates support check-ins while the phone is locked. The interval is a minimum gap between automatic saves, not a guaranteed background timer: late or missing system readings can leave gaps. Returning to the foreground reasserts tracking. The map starts near the latest known location and requests a fresh foreground reading without saving an extra check-in. It shows the ages of the latest location and last saved check-in separately.
+
+Live map fixes notify only the visible map. The saved grid is computed separately from live camera updates. Location lookups fetch the needed record instead of loading the full journal. Motion batches and Health step journal writes run in utility tasks with their own SwiftData contexts; unchanged step totals are left untouched. Automatic insight refreshes run only while Analyze is selected.
+
+Native iOS checks default to every 30 minutes; the browser preview defaults to 10 minutes. The local web server also enforces a 5-minute minimum between automatic location saves. Manual check-ins are unrestricted. This is not a second-by-second track.
 
 Location tracking is always on. It is the default, it is remembered, and it starts by itself whenever the app runs. The first reading asks for location permission once. After that, check-ins repeat on the interval with no extra taps and no typed coordinates.
 

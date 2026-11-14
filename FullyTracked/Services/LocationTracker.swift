@@ -36,34 +36,47 @@ struct LocationFix: Sendable {
 }
 
 @MainActor
+final class LiveMapLocation: ObservableObject {
+    @Published var fix: LocationFix?
+}
+
+@MainActor
 final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationTracker()
 
-    @Published private(set) var statusLine = "Location is on. Check-ins are saved on the interval, including while the app is not on screen."
+    @Published private(set) var statusLine = "Automatic check-ins are on. Timing depends on location updates from iOS."
     @Published private(set) var lastEvent = ""
     @Published private(set) var checkingIn = false
     @Published private(set) var trackingEnabled: Bool
+    /// Live fixes only notify the map, so they do not invalidate journal forms.
+    let liveMapLocation = LiveMapLocation()
+    private var mapVisible = false
+    private var latestFix: LocationFix? {
+        didSet {
+            if mapVisible { liveMapLocation.fix = latestFix }
+        }
+    }
 
     private let manager = CLLocationManager()
     private let floorManager = CLLocationManager()
+    private let mapManager = CLLocationManager()
     private var container: ModelContainer?
     private var configured = false
     private var floorConfigured = false
     private var lastAcceptedAt: Date?
+    private var lastAutomaticCheckAt: Date?
     private var manualCheckIn = false
-    /// iOS 18 keeps Always authorization effective only while this session is retained.
+    /// Retain our explicit authorization requirement for background check-ins.
     private var alwaysServiceSession: CLServiceSession?
     private static let intervalKey = "locationIntervalMinutes"
     private static let enabledKey = "locationTrackingEnabled"
+    private static let cleanupKey = "fullyTracked.location.checkInsOnlyCleanup.v1"
+    private static let lastCheckKey = "fullyTracked.location.lastAutomaticCheckAt"
 
     var intervalMinutes: Int {
         guard UserDefaults.standard.object(forKey: Self.intervalKey) != nil else { return 30 }
         let stored = UserDefaults.standard.integer(forKey: Self.intervalKey)
         return min(10_080, max(1, stored))
-    }
-
-    var canTrackInBackground: Bool {
-        trackingEnabled && manager.authorizationStatus == .authorizedAlways
     }
 
     override init() {
@@ -73,13 +86,49 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             trackingEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
         }
         super.init()
+        lastAutomaticCheckAt = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date
         publishStatus()
     }
 
     func attach(_ container: ModelContainer) {
         self.container = container
+        if !UserDefaults.standard.bool(forKey: Self.cleanupKey) {
+            do {
+                try LocationHistoryCleanup.run(in: container)
+                UserDefaults.standard.set(true, forKey: Self.cleanupKey)
+            } catch {
+                lastEvent = "Old trip and visit records could not be cleared. Cleanup will retry the next time the app opens."
+            }
+        }
         PlaceNamer.attach(container)
         MotionActivityMonitor.shared.attach(container)
+        lastAcceptedAt = (try? JournalQueries.latestCheckIn(in: container.mainContext))?.savedAt
+        if let latest = try? JournalQueries.latestCheckIn(in: container.mainContext, byOccurrence: true) {
+            if let latitude = latest.latitude, let longitude = latest.longitude {
+                latestFix = LocationFix(
+                    latitude: latitude,
+                    longitude: longitude,
+                    accuracy: latest.accuracyMeters ?? -1,
+                    altitude: latest.altitude,
+                    timestamp: latest.occurredAt
+                )
+            }
+        }
+    }
+
+    func setMapVisible(_ visible: Bool) {
+        mapVisible = visible
+        if visible { liveMapLocation.fix = latestFix }
+    }
+
+    /// A foreground map refresh never creates an extra journal entry.
+    func refreshMapLocation() {
+        guard UIApplication.shared.applicationState == .active else { return }
+        guard manager.authorizationStatus == .authorizedAlways
+            || manager.authorizationStatus == .authorizedWhenInUse else { return }
+        mapManager.delegate = self
+        mapManager.desiredAccuracy = kCLLocationAccuracyBest
+        mapManager.requestLocation()
     }
 
     func setInterval(minutes: Int) {
@@ -155,27 +204,11 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
         UIApplication.shared.open(url)
     }
 
-    func mostRecentLocation() -> CLLocation? {
-        guard let latest = allEntries()
-            .filter({ $0.entryType == .location || $0.entryType == .visit })
-            .filter({ $0.latitude != nil && $0.longitude != nil })
-            .max(by: { $0.occurredAt < $1.occurredAt }),
-              let latitude = latest.latitude,
-              let longitude = latest.longitude else {
-            return nil
-        }
-        return CLLocation(latitude: latitude, longitude: longitude)
-    }
-
-    @discardableResult
-    func recordTripFix(_ fix: LocationFix) -> Bool {
-        guard fix.isRecordable() else { return false }
-        return save(fix, source: "trip", manual: false, announce: false)
-    }
-
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
+        let managerID = ObjectIdentifier(manager)
         Task { @MainActor in
+            guard managerID != ObjectIdentifier(self.mapManager) else { return }
             self.apply(status)
         }
     }
@@ -184,34 +217,23 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
         let fixes = locations.map { LocationFix(location: $0) }
         let managerID = ObjectIdentifier(manager)
         Task { @MainActor in
+            if let fix = fixes.last, fix.isRecordable(),
+               fix.timestamp > (self.latestFix?.timestamp ?? .distantPast) {
+                self.latestFix = fix
+            }
+            if managerID == ObjectIdentifier(self.mapManager) {
+                return
+            }
             let fromFloor = managerID == ObjectIdentifier(self.floorManager)
             if fromFloor {
                 if !self.manualCheckIn {
-                    self.consume(fixes, manual: false, source: "significant")
+                    self.consume(fixes, manual: false)
                 }
                 MotionActivityMonitor.shared.noteAwake()
                 return
             }
             let manual = self.manualCheckIn
-            self.consume(fixes, manual: manual, source: "device")
-        }
-    }
-
-    nonisolated func locationManager(_ manager: CLLocationManager, didVisit visit: CLVisit) {
-        let arrival = visit.arrivalDate
-        let departure = visit.departureDate
-        let latitude = visit.coordinate.latitude
-        let longitude = visit.coordinate.longitude
-        let accuracy = visit.horizontalAccuracy
-        Task { @MainActor in
-            self.recordVisit(
-                arrival: arrival,
-                departure: departure,
-                latitude: latitude,
-                longitude: longitude,
-                accuracy: accuracy
-            )
-            MotionActivityMonitor.shared.noteAwake()
+            self.consume(fixes, manual: manual)
         }
     }
 
@@ -297,7 +319,9 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             floorManager.activityType = .other
             floorManager.pausesLocationUpdatesAutomatically = true
         }
-        floorManager.startMonitoringVisits()
+        // Retire visit monitoring registered by earlier versions. Significant changes
+        // can wake the app, but still pass through the check-in interval below.
+        floorManager.stopMonitoringVisits()
         floorManager.startMonitoringSignificantLocationChanges()
     }
 
@@ -320,7 +344,7 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             statusLine = "Location check-ins are off. A one-time check-in still saves when you ask."
             return
         }
-        statusLine = "Location is on. A check-in is saved every \(intervalMinutes) minutes, including while the app is not on screen."
+        statusLine = "Location is checked about every \(intervalMinutes) minutes, including while the phone is locked. The same grid cell is saved at most once an hour. Timing depends on location updates from iOS."
     }
 
     private func finishManual(message: String) {
@@ -330,9 +354,10 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
         lastEvent = message
     }
 
-    /// Updates may arrive often. Only one automatic check-in is stored per interval.
-    /// A manual check-in ignores that gap. Trip fixes do not use this path.
-    private func consume(_ fixes: [LocationFix], manual: Bool, source: String) {
+    /// Evaluate once per interval, saving a new cell or an hourly same-cell check-in.
+    /// A manual check-in bypasses both limits. All automatic readings use this path.
+    private func consume(_ fixes: [LocationFix], manual: Bool) {
+        guard manual || trackingEnabled else { return }
         guard let fix = fixes.last else {
             if manual {
                 finishManual(message: "Location was not recorded.")
@@ -348,14 +373,14 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             }
             return
         }
-        if !manual && !shouldRecord(at: Date()) {
+        if !manual && !shouldSaveAutomatic(fix, at: Date()) {
             return
         }
-        _ = save(fix, source: source, manual: manual, announce: true)
+        _ = save(fix, manual: manual, announce: true)
     }
 
     @discardableResult
-    private func save(_ fix: LocationFix, source: String, manual: Bool, announce: Bool) -> Bool {
+    private func save(_ fix: LocationFix, manual: Bool, announce: Bool) -> Bool {
         if manual {
             manualCheckIn = false
             checkingIn = false
@@ -368,25 +393,20 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
             return false
         }
 
-        let countsTowardInterval = source != "trip"
         let previous = lastAcceptedAt
-        if countsTowardInterval {
-            lastAcceptedAt = Date()
-        }
+        lastAcceptedAt = Date()
         let entry = JournalEntry(type: .location, occurredAt: fix.timestamp)
         entry.latitude = fix.latitude
         entry.longitude = fix.longitude
         entry.accuracyMeters = fix.accuracy
         entry.altitude = fix.altitude
-        entry.source = source
+        entry.source = "device"
         fillBattery(entry)
         context.insert(entry)
         do {
             try context.save()
         } catch {
-            if countsTowardInterval {
-                lastAcceptedAt = previous
-            }
+            lastAcceptedAt = previous
             context.delete(entry)
             if manual || announce {
                 lastEvent = "The check-in could not be saved. No substitute reading was stored."
@@ -412,86 +432,44 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
         return true
     }
 
-    private func recordVisit(
-        arrival: Date,
-        departure: Date,
-        latitude: Double,
-        longitude: Double,
-        accuracy: Double
-    ) {
-        let departureOpen = departure == Date.distantFuture
-        let arrivalOpen = arrival == Date.distantFuture
-        let kind: String
-        let occurredAt: Date
-        if departureOpen {
-            guard !arrivalOpen else { return }
-            kind = "arrival"
-            occurredAt = arrival
-        } else {
-            kind = "departure"
-            occurredAt = departure
-        }
-        guard latitude.isFinite, longitude.isFinite,
-              latitude >= -90, latitude <= 90, longitude >= -180, longitude <= 180 else {
-            return
-        }
-        guard let context = container?.mainContext else { return }
-        if visitExists(kind: kind, occurredAt: occurredAt, latitude: latitude, longitude: longitude) {
-            return
-        }
+    private func shouldSaveAutomatic(_ fix: LocationFix, at now: Date) -> Bool {
+        guard LocationCheckInPolicy.isCheckDue(
+            now: now, intervalMinutes: intervalMinutes,
+            lastCheckedAt: lastAutomaticCheckAt, lastSavedAt: lastAcceptedAt
+        ) else { return false }
 
-        let entry = JournalEntry(type: .visit, occurredAt: occurredAt)
-        entry.kind = kind
-        entry.latitude = latitude
-        entry.longitude = longitude
-        entry.accuracyMeters = accuracy.isFinite && accuracy >= 0 ? accuracy : nil
-        entry.source = "visit"
-        if kind == "departure", !arrivalOpen, departure > arrival {
-            entry.durationMinutes = departure.timeIntervalSince(arrival) / 60
-        }
-        fillBattery(entry)
-        context.insert(entry)
+        // Read the latest saved check-in, including imports, manual saves, and
+        // significant-change check-ins from earlier app versions.
+        guard let context = container?.mainContext else { return false }
+        let previous: JournalEntry?
         do {
-            try context.save()
+            previous = try JournalQueries.latestCheckIn(in: context)
         } catch {
-            context.delete(entry)
-            return
-        }
-        schedulePlaceName(latitude: latitude, longitude: longitude, entryID: entry.id)
-    }
-
-    private func visitExists(kind: String, occurredAt: Date, latitude: Double, longitude: Double) -> Bool {
-        let here = CLLocation(latitude: latitude, longitude: longitude)
-        return allEntries().contains { entry in
-            guard entry.entryType == .visit, entry.kind == kind else { return false }
-            guard abs(entry.occurredAt.timeIntervalSince(occurredAt)) < 1 else { return false }
-            guard let lat = entry.latitude, let lon = entry.longitude else { return false }
-            return CLLocation(latitude: lat, longitude: lon).distance(from: here) < 50
-        }
-    }
-
-    private func shouldRecord(at now: Date) -> Bool {
-        let gap = TimeInterval(intervalMinutes * 60)
-        if let lastAcceptedAt, now.timeIntervalSince(lastAcceptedAt) < gap {
+            lastEvent = "The last check-in could not be read. This check will retry when location updates arrive."
             return false
         }
-        if let stored = latestIntervalAnchor(), now.timeIntervalSince(stored) < gap {
-            return false
+        guard LocationCheckInPolicy.isCheckDue(
+            now: now, intervalMinutes: intervalMinutes,
+            lastCheckedAt: lastAutomaticCheckAt, lastSavedAt: previous?.savedAt
+        ) else { return false }
+
+        // Persist even a skipped check so reopening the app does not check early.
+        lastAutomaticCheckAt = now
+        UserDefaults.standard.set(now, forKey: Self.lastCheckKey)
+        let previousCell: LocationGridCell?
+        if let latitude = previous?.latitude, let longitude = previous?.longitude {
+            previousCell = LocationGridCell(latitude: latitude, longitude: longitude)
+        } else {
+            previousCell = nil
         }
-        return true
-    }
-
-    /// Trip points are extra. They do not move the interval check-in clock.
-    private func latestIntervalAnchor() -> Date? {
-        allEntries()
-            .filter { $0.entryType == .location && $0.source != "trip" }
-            .map(\.savedAt)
-            .max()
-    }
-
-    private func allEntries() -> [JournalEntry] {
-        guard let context = container?.mainContext else { return [] }
-        return (try? context.fetch(FetchDescriptor<JournalEntry>())) ?? []
+        let shouldSave = LocationCheckInPolicy.shouldSave(
+            cell: LocationGridCell(latitude: fix.latitude, longitude: fix.longitude),
+            previousCell: previousCell, lastSavedAt: previous?.savedAt, now: now
+        )
+        if !shouldSave {
+            lastEvent = "Location checked. Still in the same grid cell; the next saved check-in waits until an hour has passed or the cell changes."
+        }
+        return shouldSave
     }
 
     private func fillBattery(_ entry: JournalEntry) {
@@ -515,7 +493,7 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
     private func applyPlaceName(_ name: String, to id: UUID) {
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty, let context = container?.mainContext else { return }
-        guard let entry = allEntries().first(where: { $0.id == id }) else { return }
+        guard let entry = try? JournalQueries.entry(id: id, in: context) else { return }
         if let existing = entry.placeName?.trimmingCharacters(in: .whitespacesAndNewlines), !existing.isEmpty {
             return
         }
@@ -525,7 +503,7 @@ final class LocationTracker: NSObject, ObservableObject, CLLocationManagerDelega
 
     private func attachWeather(_ reading: WeatherReading?, to id: UUID, announce: Bool) {
         guard let context = container?.mainContext else { return }
-        guard let entry = allEntries().first(where: { $0.id == id }) else { return }
+        guard let entry = try? JournalQueries.entry(id: id, in: context) else { return }
         guard let reading else {
             entry.temperatureCelsius = nil
             entry.condition = nil

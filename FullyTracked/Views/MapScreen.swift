@@ -4,34 +4,39 @@ import SwiftData
 import SwiftUI
 
 struct MapScreen: View {
+    @Query(filter: #Predicate<JournalEntry> { $0.typeRaw == "location" }) private var entries: [JournalEntry]
+
+    var body: some View {
+        // This view depends only on saved entries. Live location and camera
+        // updates happen in the child without rebuilding the historical grid.
+        let points = entries.filter { entry in
+            guard entry.isLocationCheckIn,
+                  let latitude = entry.latitude, let longitude = entry.longitude else { return false }
+            return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+        }
+        LiveCheckInMap(cells: HeatCell.make(from: points), checkInCount: points.count,
+                       lastCheckInAt: points.map(\.occurredAt).max())
+    }
+}
+
+private struct LiveCheckInMap: View {
     @Environment(AppNavigation.self) private var navigation
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var tracker: LocationTracker
-    @Query private var entries: [JournalEntry]
+    @ObservedObject private var liveLocation = LocationTracker.shared.liveMapLocation
+    let cells: [HeatCell]
+    let checkInCount: Int
+    let lastCheckInAt: Date?
     @State private var follow = true
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var latestRegion: MKCoordinateRegion?
     @State private var appliedToken: UUID?
 
-    /// Interval and manual check-ins only. Trip, significant-change, and visit points are not cells.
-    private var points: [JournalEntry] {
-        entries.filter { entry in
-            guard entry.entryType == .location,
-                  entry.source == nil || entry.source == "device",
-                  let latitude = entry.latitude,
-                  let longitude = entry.longitude else { return false }
-            return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
-        }
-    }
-
-    private var cells: [HeatCell] {
-        HeatCell.make(from: points)
-    }
-
     private var countLabel: String {
-        switch points.count {
+        switch checkInCount {
         case 0: ""
         case 1: "1 check-in"
-        default: "\(points.count) check-ins"
+        default: "\(checkInCount) check-ins"
         }
     }
 
@@ -48,7 +53,7 @@ struct MapScreen: View {
                     .textCase(.uppercase)
                     .foregroundStyle(Theme.muted)
             }
-            if points.isEmpty {
+            if checkInCount == 0 {
                 Text("Allow location to center this map. Visited cells darken with each check-in.")
                     .font(Theme.font(15))
                     .foregroundStyle(Theme.muted)
@@ -62,7 +67,8 @@ struct MapScreen: View {
                         }
                     } else {
                         follow = true
-                        camera = .userLocation(fallback: .automatic)
+                        followLatestLocation()
+                        tracker.refreshMapLocation()
                     }
                 }
                 CapsuleButton(title: tracker.checkingIn ? "Checking in" : "Check in now", filled: false) {
@@ -94,6 +100,20 @@ struct MapScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .frame(minHeight: 280)
             .accessibilityLabel(mapAccessLabel)
+            if follow, let fix = liveLocation.fix {
+                (Text("Latest location: ") + Text(fix.timestamp, style: .relative) + Text(" ago"))
+                    .font(Theme.font(14))
+                    .foregroundStyle(Theme.muted)
+            }
+            if let lastCheckInAt {
+                (Text("Last saved check-in: ") + Text(lastCheckInAt, style: .relative) + Text(" ago"))
+                    .font(Theme.font(14))
+                    .foregroundStyle(Theme.muted)
+            } else {
+                Text("No saved check-ins yet.")
+                    .font(Theme.font(14))
+                    .foregroundStyle(Theme.muted)
+            }
             if !tracker.lastEvent.isEmpty {
                 Text(tracker.lastEvent)
                     .font(Theme.font(14))
@@ -105,14 +125,49 @@ struct MapScreen: View {
         .padding(.top, 18)
         .padding(.bottom, 8)
         .background(Theme.background)
-        .onAppear(perform: applyFocusIfNeeded)
+        .onAppear {
+            tracker.setMapVisible(true)
+            applyFocusIfNeeded()
+            if follow {
+                followLatestLocation()
+                tracker.refreshMapLocation()
+            }
+        }
+        .onDisappear { tracker.setMapVisible(false) }
+        .onChange(of: scenePhase) { _, phase in
+            tracker.setMapVisible(phase == .active && navigation.screen == .map)
+            if phase == .active, navigation.screen == .map, follow {
+                followLatestLocation()
+                tracker.refreshMapLocation()
+            }
+        }
+        .onChange(of: liveLocation.fix?.timestamp) { _, _ in
+            if follow, navigation.screen == .map {
+                followLatestLocation()
+            }
+        }
         .onChange(of: navigation.mapFocus?.token) { _, _ in
             applyFocusIfNeeded()
         }
     }
 
     private var mapAccessLabel: String {
-        points.count == 1 ? "1 location check-in" : "\(points.count) location check-ins"
+        checkInCount == 1 ? "1 location check-in" : "\(checkInCount) location check-ins"
+    }
+
+    private func followLatestLocation() {
+        let fallback: MapCameraPosition
+        if let fix = liveLocation.fix,
+           fix.latitude >= -90, fix.latitude <= 90,
+           fix.longitude >= -180, fix.longitude <= 180 {
+            fallback = .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude),
+                span: MKCoordinateSpan(latitudeDelta: 0.006, longitudeDelta: 0.006)
+            ))
+        } else {
+            fallback = .automatic
+        }
+        camera = .userLocation(fallback: fallback)
     }
 
     private func applyFocusIfNeeded() {
@@ -129,7 +184,7 @@ struct MapScreen: View {
 }
 
 struct HeatCell: Identifiable {
-    static let degrees = 0.00125
+    static let degrees = LocationGridCell.degrees
 
     var id: String
     var south: Double
@@ -154,8 +209,9 @@ struct HeatCell: Identifiable {
         var buckets: [String: HeatCell] = [:]
         for entry in entries {
             guard let latitude = entry.latitude, let longitude = entry.longitude else { continue }
-            let south = origin(latitude)
-            let west = origin(longitude)
+            let gridCell = LocationGridCell(latitude: latitude, longitude: longitude)
+            let south = gridCell.south
+            let west = gridCell.west
             let key = String(format: "%.5f,%.5f", locale: Locale(identifier: "en_US_POSIX"), south, west)
             if var cell = buckets[key] {
                 cell.count += 1
@@ -172,10 +228,6 @@ struct HeatCell: Identifiable {
             }
         }
         return buckets.values.sorted { $0.count > $1.count }
-    }
-
-    private static func origin(_ value: Double) -> Double {
-        (value / degrees).rounded(.down) * degrees
     }
 
     private static func mix(count: Int) -> Double {

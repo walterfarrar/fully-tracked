@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { readDailyStepTotals } = require('./health/steps-reader');
+const { shouldSaveAutomatic, SAME_CELL_SAVE_MS } = require('./public/location-policy');
 
 const PORT = 3847;
 const HOST = '127.0.0.1';
@@ -517,9 +518,9 @@ function readBody(req) {
   });
 }
 
-function openDatabase() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const db = new DatabaseSync(DB_PATH);
+function openDatabase(databasePath = DB_PATH) {
+  if (databasePath !== ':memory:') fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  const db = new DatabaseSync(databasePath);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA busy_timeout = 3000');
   db.exec(`
@@ -580,7 +581,7 @@ function createApp(db) {
     'SELECT * FROM entries ORDER BY occurred_at DESC, saved_at DESC, id DESC'
   );
   const latestLocation = db.prepare(
-    "SELECT saved_at FROM entries WHERE type = 'location' ORDER BY saved_at DESC LIMIT 1"
+    "SELECT saved_at, latitude, longitude FROM entries WHERE type = 'location' ORDER BY saved_at DESC LIMIT 1"
   );
 
   let writeChain = Promise.resolve();
@@ -603,13 +604,18 @@ function createApp(db) {
   function insertEntry(body) {
     const value = validateEntry(body);
     const now = new Date();
-    if (value.type === 'location') {
+    if (value.type === 'location' && body.manual !== true) {
       const previous = latestLocation.get();
       if (previous) {
         const elapsed = now.getTime() - new Date(previous.saved_at).getTime();
         if (elapsed < MIN_LOCATION_GAP_MS) {
           throw new HttpError(429, 'Location check-ins are limited to one every 5 minutes.', {
             retryAfterSeconds: Math.ceil((MIN_LOCATION_GAP_MS - elapsed) / 1000),
+          });
+        }
+        if (!shouldSaveAutomatic(value, { ...previous, savedAt: previous.saved_at }, now.getTime())) {
+          throw new HttpError(429, 'The same grid cell is saved at most once an hour.', {
+            retryAfterSeconds: Math.ceil((SAME_CELL_SAVE_MS - elapsed) / 1000),
           });
         }
       }
@@ -933,6 +939,8 @@ function main() {
 }
 
 module.exports = {
+  createApp,
+  openDatabase,
   buildTrends,
   searchBlob,
   MIN_LOCATION_GAP_MS,

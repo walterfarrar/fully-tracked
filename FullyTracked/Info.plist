@@ -33,11 +33,11 @@
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Fully Tracked can add water, caffeine, nutrition, sleep, and mood you log to Apple Health on this device.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Fully Tracked saves location check-ins, place visits, and significant location changes on this device, including while the app is not on screen. Nothing leaves the device.</string>
+	<string>Fully Tracked saves a location check-in at your chosen interval on this device, including while the app is not on screen.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Fully Tracked saves a location check-in on this device when you ask, and shows where you are on the map. Visits and significant changes stay on this device too. Nothing leaves the device.</string>
+	<string>Fully Tracked saves a location check-in at your chosen interval or when you tap Check in now, and shows where you are on the map.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>Fully Tracked reads motion on this device to record trips and activity such as walking, cycling, and driving. Nothing leaves the device.</string>
+	<string>Fully Tracked reads motion on this device to record activity such as walking, cycling, and driving.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Fully Tracked reads a nutrition label from a photo you choose. The photo is not saved.</string>
 	<key>UIBackgroundModes</key>

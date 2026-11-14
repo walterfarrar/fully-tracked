@@ -280,7 +280,7 @@ struct SettingsView: View {
 
     private var locationPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            FieldLabel(text: "Minutes")
+            FieldLabel(text: "Check-in interval (minutes)")
             HStack(spacing: 12) {
                 TextField("Minutes", value: $minutes, format: .number)
                     .textFieldStyle(.plain)
@@ -290,8 +290,8 @@ struct SettingsView: View {
                 Stepper("Minutes", value: $minutes, in: 1...10_080, step: 1)
                     .labelsHidden()
             }
-            FieldLabel(text: "Tracking")
-            Picker("Tracking", selection: Binding(
+            FieldLabel(text: "Automatic check-ins")
+            Picker("Automatic check-ins", selection: Binding(
                 get: { tracker.trackingEnabled },
                 set: { tracker.setTrackingEnabled($0) }
             )) {
@@ -300,6 +300,9 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
             .tint(Theme.accent)
+            Text("Checks location at each interval. Saves when the grid cell changes or an hour has passed since the last saved check-in. Check in now always saves a usable reading.")
+                .font(Theme.font(14))
+                .foregroundStyle(Theme.muted)
             Text(tracker.statusLine)
                 .font(Theme.font(14))
                 .foregroundStyle(Theme.muted)

@@ -38,7 +38,7 @@ struct HomeView: View {
                 .padding(.top, 6)
 
                 LazyVGrid(columns: columns, spacing: 12) {
-                    actionButton("Location", symbol: "mappin.and.ellipse") {
+                    actionButton("Check in now", symbol: "mappin.and.ellipse") {
                         tracker.checkInNow()
                     }
                     .disabled(tracker.checkingIn)

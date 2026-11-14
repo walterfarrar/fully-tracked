@@ -22,7 +22,7 @@
           <div class="actions">
             <button type="button" data-open="location">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
-              <span>Location</span>
+              <span>Check in now</span>
             </button>
             <button type="button" data-open="meal">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v7a2 2 0 0 0 4 0V3"/><path d="M8 10v11"/><path d="M17 3c-1.6 2.2-2.2 4.2-2.2 6.2h4.4C19.2 7.2 18.6 5.2 17 3z"/><path d="M17 9.2V21"/></svg>
@@ -285,7 +285,7 @@
             <button type="button" role="tab" data-settings-tab="hydration" aria-selected="true">Hydration</button>
             <button type="button" role="tab" data-settings-tab="food" aria-selected="false">Food</button>
             <button type="button" role="tab" data-settings-tab="medication" aria-selected="false">Medication</button>
-            <button type="button" role="tab" data-settings-tab="location" aria-selected="false">Location</button>
+            <button type="button" role="tab" data-settings-tab="location" aria-selected="false">Check-ins</button>
           </div>
           <section class="entry-form" role="tabpanel" data-settings-panel="hydration">
             <p class="hint">Ounces per label.</p>
@@ -318,12 +318,13 @@
             <button type="button" id="substance-add">Add</button>
           </section>
           <section class="entry-form" role="tabpanel" data-settings-panel="location" hidden>
+            <p class="hint">Checks at each interval. Saves when the grid cell changes or an hour has passed since the last saved check-in. Check in now always saves a usable reading.</p>
             <div class="field">
-              <label for="interval">Minutes</label>
+              <label for="interval">Check-in interval (minutes)</label>
               <input id="interval" type="number" min="1" max="10080" step="1" value="10" />
             </div>
             <div class="field">
-              <span id="track-label">Tracking</span>
+              <span id="track-label">Automatic check-ins</span>
               <div class="toggle-group" id="track-toggle" role="group" aria-labelledby="track-label">
                 <button type="button" data-track="on" aria-pressed="false">On</button>
                 <button type="button" data-track="off" aria-pressed="true">Off</button>
@@ -336,7 +337,7 @@
           <h2>Log</h2>
           <div id="log-types" class="choice-list" role="group" aria-label="Entry type">
             <button type="button" data-log-type="all" aria-pressed="true">All</button>
-            <button type="button" data-log-type="location" aria-pressed="false">Location</button>
+            <button type="button" data-log-type="location" aria-pressed="false">Check-in</button>
             <button type="button" data-log-type="meal" aria-pressed="false">Meal</button>
             <button type="button" data-log-type="water" aria-pressed="false">Hydration</button>
             <button type="button" data-log-type="bathroom" aria-pressed="false">Bathroom</button>
@@ -423,7 +424,7 @@
           <p id="map-empty" class="empty">Allow location to center this map. Visited cells darken with each check-in.</p>
           <div class="map-controls">
             <button type="button" id="follow-toggle" aria-pressed="true">Follow me</button>
-            <button type="button" id="track-location">Track location</button>
+            <button type="button" id="track-location">Check in now</button>
           </div>
           <div id="map" class="map"></div>
         </section>
@@ -479,6 +480,7 @@
     <noscript>This journal needs JavaScript for logging, charts, and the map.</noscript>
     <script src="vendor/chart.umd.js"></script>
     <script src="vendor/leaflet/leaflet.js"></script>
-    <script src="app.js?v=app26"></script>
+    <script src="location-policy.js?v=1"></script>
+    <script src="app.js?v=app27"></script>
   </body>
 </html>

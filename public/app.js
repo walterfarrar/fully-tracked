@@ -5,9 +5,10 @@ const MAX_MINUTES = 7 * 24 * 60;
 const DEFAULT_MINUTES = 10;
 const TRACK_KEY = 'fully-tracked-location';
 const INTERVAL_KEY = 'fully-tracked-interval-min';
+const LAST_CHECK_KEY = 'fully-tracked-last-location-check';
 
 const TYPE_LABELS = {
-  location: 'Location',
+  location: 'Check-in',
   meal: 'Meal',
   water: 'Hydration',
   bathroom: 'Bathroom',
@@ -45,12 +46,11 @@ let hereMarker = null;
 let hereWatchId = null;
 let hereFixPending = false;
 let followMe = true;
-let watchedCellKey = null;
 let mapNote = 'Allow location to center this map. Visited cells darken with each check-in.';
 let mapFocusToken = 0;
 let pendingMapPoint = null;
 const MAP_FOCUS_ZOOM = 16;
-const CELL_DEGREES = 0.00125;
+const CELL_DEGREES = LocationCheckIns.CELL_DEGREES;
 
 const intervalInput = document.getElementById('interval');
 const trackStatus = document.getElementById('track-status');
@@ -1076,13 +1076,22 @@ function previewEntriesResponse(url) {
 
 function savePreviewEntry(body) {
   const entries = readPreviewEntries();
-  const manualPing = Boolean(body.manual);
+  const manualPing = body.manual === true;
   if (body.type === 'location' && !manualPing) {
     const latest = entries
       .filter((entry) => entry.type === 'location')
       .reduce((max, entry) => Math.max(max, new Date(entry.savedAt).getTime()), 0);
     if (latest && Date.now() - latest < intervalMs()) {
       const error = new Error('A check-in is already recent.');
+      error.status = 429;
+      throw error;
+    }
+  }
+  if (body.type === 'location' && !manualPing) {
+    const previous = entries.filter((entry) => entry.type === 'location')
+      .reduce((last, entry) => !last || new Date(entry.savedAt) > new Date(last.savedAt) ? entry : last, null);
+    if (!LocationCheckIns.shouldSaveAutomatic(body, previous)) {
+      const error = new Error('The same grid cell is saved at most once an hour.');
       error.status = 429;
       throw error;
     }
@@ -1442,20 +1451,6 @@ function stopHereWatch() {
     navigator.geolocation.clearWatch(hereWatchId);
   }
   hereWatchId = null;
-  watchedCellKey = null;
-}
-
-function heatCellKey(latitude, longitude) {
-  const south = Math.floor(latitude / CELL_DEGREES) * CELL_DEGREES;
-  const west = Math.floor(longitude / CELL_DEGREES) * CELL_DEGREES;
-  return `${south.toFixed(5)},${west.toFixed(5)}`;
-}
-
-function watchCellChanged(latitude, longitude) {
-  const key = heatCellKey(latitude, longitude);
-  const previous = watchedCellKey;
-  watchedCellKey = key;
-  return previous != null && previous !== key;
 }
 
 function readAltitude(coords) {
@@ -1478,26 +1473,6 @@ function locationBody(position, manual) {
   return body;
 }
 
-async function saveCellCrossing(position) {
-  const { latitude, longitude, accuracy } = position.coords;
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0) return;
-  try {
-    await getJson('/api/entries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(locationBody(position, true)),
-    });
-    try {
-      await refreshAll();
-    } catch (error) {
-      if (!offlinePreview(error)) showBanner(error.message);
-    }
-  } catch (error) {
-    if (error && error.status === 429) return;
-    if (!offlinePreview(error)) showBanner(error.message);
-  }
-}
-
 function startHereWatch() {
   if (!tracking || !mapTabOpen()) {
     stopHereWatch();
@@ -1517,7 +1492,6 @@ function startHereWatch() {
     });
     return;
   }
-  watchedCellKey = null;
   hereWatchId = geo.watchPosition((position) => {
     if (!tracking || !mapTabOpen()) {
       stopHereWatch();
@@ -1526,8 +1500,6 @@ function startHereWatch() {
     }
     const { latitude, longitude } = position.coords;
     placeHereMarker(latitude, longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-    if (watchCellChanged(latitude, longitude)) void saveCellCrossing(position);
   }, () => {}, {
     enableHighAccuracy: true,
     maximumAge: 1000,
@@ -1554,9 +1526,7 @@ function locationPoints(entries) {
 function heatCellsFor(points) {
   const cells = new Map();
   for (const point of points) {
-    const south = Math.floor(point.latitude / CELL_DEGREES) * CELL_DEGREES;
-    const west = Math.floor(point.longitude / CELL_DEGREES) * CELL_DEGREES;
-    const key = `${south.toFixed(5)},${west.toFixed(5)}`;
+    const { south, west, key } = LocationCheckIns.gridCell(point.latitude, point.longitude);
     const cell = cells.get(key) || {
       south,
       west,
@@ -1741,16 +1711,19 @@ function intervalMs() {
   return intervalMinutes() * 60 * 1000;
 }
 
-function latestLocationSavedAt() {
+function latestLocationCheckIn() {
   return allEntries
     .filter((entry) => entry.type === 'location')
-    .reduce((latest, entry) => Math.max(latest, new Date(entry.savedAt).getTime()), 0);
+    .reduce((latest, entry) => !latest || new Date(entry.savedAt) > new Date(latest.savedAt) ? entry : latest, null);
 }
 
 function msUntilDue() {
-  const latest = latestLocationSavedAt();
-  if (!latest) return 0;
-  return Math.max(0, intervalMs() - (Date.now() - latest));
+  const checked = localStorage.getItem(LAST_CHECK_KEY);
+  const previous = latestLocationCheckIn();
+  return LocationCheckIns.checkDelay(
+    Date.now(), intervalMs(), checked == null ? NaN : Number(checked),
+    previous ? new Date(previous.savedAt).getTime() : NaN
+  );
 }
 
 function setStatus(message) {
@@ -1759,7 +1732,7 @@ function setStatus(message) {
 
 function nextCheckInSentence(delay) {
   const when = formatClock(new Date(Date.now() + delay));
-  return `Next check-in around ${when}, every ${intervalMinutes()} minutes. Tracking stays on while this app can read the device.`;
+  return `Next location check around ${when}, every ${intervalMinutes()} minutes. The same grid cell is saved at most once an hour.`;
 }
 
 function scheduleIn(ms) {
@@ -1865,6 +1838,12 @@ async function recordPosition() {
   showDeviceOnMap(latitude, longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0) {
     setStatus('The device returned a reading without a usable accuracy, so it was not saved. The next try stays on the interval.');
+    return 'skip';
+  }
+  const checkedAt = Date.now();
+  localStorage.setItem(LAST_CHECK_KEY, String(checkedAt));
+  if (!LocationCheckIns.shouldSaveAutomatic({ latitude, longitude }, latestLocationCheckIn(), checkedAt)) {
+    setStatus(`Location checked. Still in the same grid cell, so no extra check-in was saved. ${nextCheckInSentence(intervalMs())}`);
     return 'skip';
   }
   try {

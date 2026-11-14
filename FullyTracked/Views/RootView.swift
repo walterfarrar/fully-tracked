@@ -3,6 +3,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @State private var navigation = AppNavigation()
 
     var body: some View {
@@ -32,6 +33,11 @@ struct RootView: View {
         .toolbarBackground(.visible, for: .tabBar)
         .background(Theme.background.ignoresSafeArea())
         .environment(navigation)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                LocationTracker.shared.start()
+            }
+        }
         .task {
             JournalSeed.seed(context)
             LocationTracker.shared.start()

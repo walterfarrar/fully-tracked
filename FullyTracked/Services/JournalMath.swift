@@ -436,8 +436,10 @@ enum JournalMath {
             )
         case .placesVisited:
             let rows = entries.filter { entry in
-                guard entry.entryType == .visit else { return false }
-                guard entry.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "arrival" else { return false }
+                let checkIn = entry.isLocationCheckIn
+                let legacyArrival = entry.entryType == .visit
+                    && entry.kind?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "arrival"
+                guard checkIn || legacyArrival else { return false }
                 return trimmed(entry.placeName) != nil
             }
             return counted(

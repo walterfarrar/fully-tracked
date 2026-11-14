@@ -5,7 +5,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server.js"
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
   },
   "dependencies": {
     "chart.js": "^4.4.7",

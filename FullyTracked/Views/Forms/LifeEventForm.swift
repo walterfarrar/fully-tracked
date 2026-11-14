@@ -4,26 +4,20 @@ import SwiftUI
 struct LifeEventForm: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query private var events: [EventType]
+    @Query(sort: [SortDescriptor(\EventType.sortIndex), SortDescriptor(\EventType.createdAt)])
+    private var events: [EventType]
     @State private var when = Date()
     @State private var selected: String?
     @State private var newName = ""
     @State private var details = ""
     @State private var error = ""
 
-    private var ordered: [EventType] {
-        events.sorted { lhs, rhs in
-            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
-            return lhs.createdAt < rhs.createdAt
-        }
-    }
-
     var body: some View {
         CheckInChrome(title: "Life event", when: $when, error: $error, saveTitle: "Save life event", save: save) {
             VStack(alignment: .leading, spacing: 8) {
                 FieldLabel(text: "Type")
                 ChipRow(
-                    titles: ordered.map(\.name),
+                    titles: events.map(\.name),
                     isSelected: { $0 == selected },
                     onTap: { selected = $0 }
                 )

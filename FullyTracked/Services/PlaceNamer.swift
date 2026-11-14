@@ -173,7 +173,7 @@ enum PlaceNamer {
         }
     }
 
-    private static func key(_ value: Double) -> String {
+    static func key(_ value: Double) -> String {
         let rounded = (value * 1000).rounded() / 1000
         if rounded == 0 {
             return "0.000"

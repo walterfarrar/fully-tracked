@@ -18,7 +18,7 @@ enum EntryType: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .location: "Location"
+        case .location: "Check-in"
         case .visit: "Visit"
         case .activity: "Activity"
         case .meal: "Meal"
@@ -107,6 +107,10 @@ final class JournalEntry {
     var entryType: EntryType {
         get { EntryType(rawValue: typeRaw) ?? .meal }
         set { typeRaw = newValue.rawValue }
+    }
+
+    var isLocationCheckIn: Bool {
+        entryType == .location && source != "trip"
     }
 }
 
