@@ -25,6 +25,31 @@ test('first check saves; small movement in a cell is skipped; a new cell saves',
   assert.equal(shouldSaveAutomatic({ ...point, latitude: 41.002 }, previous, start + 600000), true);
 });
 
+test('map quarters each save cell and draws only occupied quarters', () => {
+  const { sandbox } = browser();
+  const parent = gridCell(41.0001, -87.0001);
+  const saveSize = parent.north - parent.south;
+  sandbox.points = [
+    { latitude: parent.south + saveSize * 0.1, longitude: parent.west + saveSize * 0.1 },
+    { latitude: parent.south + saveSize * 0.2, longitude: parent.west + saveSize * 0.2 },
+    { latitude: parent.south + saveSize * 0.8, longitude: parent.west + saveSize * 0.8 },
+  ];
+  const cells = vm.runInContext('heatCellsFor(points)', sandbox);
+  assert.equal(cells.length, 2);
+  assert.deepEqual(Array.from(cells, (cell) => cell.count).sort(), [1, 2]);
+  for (const cell of cells) {
+    assert.ok(cell.south >= parent.south - 1e-12 && cell.north <= parent.north + 1e-12);
+    assert.ok(cell.west >= parent.west - 1e-12 && cell.east <= parent.east + 1e-12);
+    assert.ok(Math.abs((cell.north - cell.south) - saveSize / 2) < 1e-12);
+    assert.ok(Math.abs((cell.east - cell.west) - saveSize / 2) < 1e-12);
+  }
+  const negative = vm.runInContext('heatCellsFor([{latitude: -0.0001, longitude: 0.0001}])', sandbox);
+  assert.equal(negative.length, 1);
+  assert.ok(negative[0].south < 0);
+  assert.ok(negative[0].south > gridCell(-0.0001, 0.0001).south);
+  assert.equal(negative[0].west, 0);
+});
+
 test('grid boundaries use floor for negative coordinates and distinguish adjacent cells', () => {
   assert.equal(gridCell(-0.0001, 0.0001).south, -0.00125);
   assert.equal(gridCell(-0.0001, 0.0001).west, 0);

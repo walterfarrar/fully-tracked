@@ -184,7 +184,8 @@ private struct LiveCheckInMap: View {
 }
 
 struct HeatCell: Identifiable {
-    static let degrees = LocationGridCell.degrees
+    /// Half the save-policy cell on each side, so one policy cell is four map cells.
+    static let degrees = LocationGridCell.degrees / 2
 
     var id: String
     var south: Double
@@ -207,12 +208,14 @@ struct HeatCell: Identifiable {
 
     static func make(from entries: [JournalEntry]) -> [HeatCell] {
         var buckets: [String: HeatCell] = [:]
+        let size = degrees
         for entry in entries {
             guard let latitude = entry.latitude, let longitude = entry.longitude else { continue }
-            let gridCell = LocationGridCell(latitude: latitude, longitude: longitude)
-            let south = gridCell.south
-            let west = gridCell.west
-            let key = String(format: "%.5f,%.5f", locale: Locale(identifier: "en_US_POSIX"), south, west)
+            let row = Int((latitude / size).rounded(.down))
+            let column = Int((longitude / size).rounded(.down))
+            let south = Double(row) * size
+            let west = Double(column) * size
+            let key = "\(row),\(column)"
             if var cell = buckets[key] {
                 cell.count += 1
                 buckets[key] = cell

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared by the map and check-in policy so their cell boundaries stay identical.
+/// Save-policy cell. The map draws four quarters of this cell and skips empty ones.
 struct LocationGridCell: Equatable, Sendable {
     static let degrees = 0.00125
 

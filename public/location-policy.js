@@ -1,6 +1,7 @@
 'use strict';
 
-// Used by the map, browser check-in loop, and local server.
+// Save-policy grid, used by the browser check-in loop and local server.
+// The map draws quarters of these cells and skips empty quarters.
 (() => {
   const CELL_DEGREES = 0.00125;
   const SAME_CELL_SAVE_MS = 60 * 60 * 1000;

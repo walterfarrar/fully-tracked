@@ -50,7 +50,7 @@ let mapNote = 'Allow location to center this map. Visited cells darken with each
 let mapFocusToken = 0;
 let pendingMapPoint = null;
 const MAP_FOCUS_ZOOM = 16;
-const CELL_DEGREES = LocationCheckIns.CELL_DEGREES;
+const MAP_CELL_DEGREES = LocationCheckIns.CELL_DEGREES / 2;
 
 const intervalInput = document.getElementById('interval');
 const trackStatus = document.getElementById('track-status');
@@ -1523,17 +1523,25 @@ function locationPoints(entries) {
   );
 }
 
+function mapCell(latitude, longitude) {
+  const row = Math.floor(latitude / MAP_CELL_DEGREES);
+  const column = Math.floor(longitude / MAP_CELL_DEGREES);
+  const south = row * MAP_CELL_DEGREES;
+  const west = column * MAP_CELL_DEGREES;
+  return {
+    south,
+    west,
+    north: south + MAP_CELL_DEGREES,
+    east: west + MAP_CELL_DEGREES,
+    key: `${row},${column}`,
+  };
+}
+
 function heatCellsFor(points) {
   const cells = new Map();
   for (const point of points) {
-    const { south, west, key } = LocationCheckIns.gridCell(point.latitude, point.longitude);
-    const cell = cells.get(key) || {
-      south,
-      west,
-      north: south + CELL_DEGREES,
-      east: west + CELL_DEGREES,
-      count: 0,
-    };
+    const { south, west, north, east, key } = mapCell(point.latitude, point.longitude);
+    const cell = cells.get(key) || { south, west, north, east, count: 0 };
     cell.count += 1;
     cells.set(key, cell);
   }

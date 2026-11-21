@@ -56,13 +56,33 @@ final class LocationCheckInPolicyTests: XCTestCase {
     }
 
     @MainActor
-    func testMapAndSavePolicyUseTheSameGridBoundaries() {
-        let entry = JournalEntry(type: .location, occurredAt: start)
-        entry.latitude = -0.0001
-        entry.longitude = 41.0001
-        let gridCell = LocationGridCell(latitude: entry.latitude!, longitude: entry.longitude!)
-        let mapCell = HeatCell.make(from: [entry]).first
-        XCTAssertEqual(mapCell?.south, gridCell.south)
-        XCTAssertEqual(mapCell?.west, gridCell.west)
+    func testMapDrawsOccupiedQuartersOfEachSaveCell() {
+        XCTAssertEqual(HeatCell.degrees * 2, LocationGridCell.degrees, accuracy: 1e-12)
+        let northwest = JournalEntry(type: .location, occurredAt: start)
+        northwest.latitude = -0.0001
+        northwest.longitude = 41.0001
+        let sameQuarter = JournalEntry(type: .location, occurredAt: start)
+        sameQuarter.latitude = -0.0002
+        sameQuarter.longitude = 41.0002
+        let southeast = JournalEntry(type: .location, occurredAt: start)
+        southeast.latitude = -0.001
+        southeast.longitude = 41.001
+
+        let saveCell = LocationGridCell(latitude: northwest.latitude!, longitude: northwest.longitude!)
+        XCTAssertEqual(saveCell, LocationGridCell(latitude: southeast.latitude!, longitude: southeast.longitude!))
+        XCTAssertEqual(HeatCell.make(from: [northwest]).count, 1)
+
+        let cells = HeatCell.make(from: [northwest, sameQuarter, southeast])
+        XCTAssertEqual(cells.count, 2)
+        XCTAssertEqual(Set(cells.map(\.count)), Set([1, 2]))
+        for cell in cells {
+            XCTAssertGreaterThanOrEqual(cell.south, saveCell.south - 1e-9)
+            XCTAssertLessThanOrEqual(cell.north, saveCell.south + LocationGridCell.degrees + 1e-9)
+            XCTAssertGreaterThanOrEqual(cell.west, saveCell.west - 1e-9)
+            XCTAssertLessThanOrEqual(cell.east, saveCell.west + LocationGridCell.degrees + 1e-9)
+            XCTAssertEqual(cell.north - cell.south, HeatCell.degrees, accuracy: 1e-9)
+            XCTAssertEqual(cell.east - cell.west, HeatCell.degrees, accuracy: 1e-9)
+        }
+        XCTAssertNotEqual(cells[0].id, cells[1].id)
     }
 }
